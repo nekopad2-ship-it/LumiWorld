@@ -7,11 +7,13 @@ const GRAPH_PATH = (chatId: string) => `worlds/${chatId}/graph.json`;
 const DEBUG_PATH = (chatId: string) => `worlds/${chatId}/debug/last_failed_state_update.txt`;
 const UI_SETTINGS_PATH = "settings/ui.json";
 const CHAT_VARIABLE_KEY = "lwe_world_state";
+const OPERATOR_SCOPE_USER_ID_ERROR = "userId is required for operator-scoped extensions";
 
 type GenerationSession = {
   chatId?: string;
   targetMessageId?: string | null;
   messageId?: string | null;
+  userId?: string | null;
 };
 
 const generationSessions = new Map<string, GenerationSession>();
@@ -29,10 +31,10 @@ function setupBackend(): void {
 
     switch (payload.type) {
       case "GET_WORLD_GRAPH": {
-        const chatId = payload.chatId ?? (await resolveActiveChatId()) ?? getTrackedChatId(userId);
+        const chatId = payload.chatId ?? getTrackedChatId(userId) ?? (await resolveActiveChatId(userId));
         rememberFrontendChat(userId, chatId);
         if (chatId) {
-          await ensureWorldGraph(chatId);
+          await ensureWorldGraph(chatId, userId);
           await sendWorldGraphData(chatId, userId);
         } else {
           await sendWorldGraphData(null, userId);
@@ -58,11 +60,15 @@ function setupBackend(): void {
 
   spindle.on("CHAT_SWITCHED", async (payload) => {
     activeChatId = getPayloadChatId(payload) ?? activeChatId;
+    const userId = getPayloadUserId(payload);
+    if (userId) {
+      rememberFrontendChat(userId, activeChatId);
+    }
     if (!activeChatId) {
       return;
     }
 
-    await ensureWorldGraph(activeChatId);
+    await ensureWorldGraph(activeChatId, userId);
     await sendWorldGraphDataToTrackedUsers(activeChatId);
   });
 
@@ -73,7 +79,7 @@ function setupBackend(): void {
     }
 
     activeChatId = chatId;
-    await ensureWorldGraph(chatId);
+    await ensureWorldGraph(chatId, getPayloadUserId(payload));
   });
 
   spindle.on("GENERATION_STARTED", (payload) => {
@@ -81,6 +87,7 @@ function setupBackend(): void {
       chatId: getPayloadChatId(payload),
       targetMessageId: payload?.targetMessageId ?? payload?.target_message_id ?? null,
       messageId: payload?.messageId ?? payload?.message_id ?? null,
+      userId: getPayloadUserId(payload),
     });
   });
 
@@ -99,16 +106,17 @@ function setupBackend(): void {
 
     const chatId = getPayloadChatId(payload) ?? session?.chatId;
     const messageId = payload?.messageId ?? payload?.message_id ?? session?.messageId;
+    const userId = getPayloadUserId(payload) ?? session?.userId ?? undefined;
     if (!chatId || !messageId) {
       return;
     }
 
-    await processCompletedGeneration(chatId, messageId);
+    await processCompletedGeneration(chatId, messageId, userId);
   });
 }
 
-async function processCompletedGeneration(chatId: string, messageId: string): Promise<void> {
-  const graph = await ensureWorldGraph(chatId);
+async function processCompletedGeneration(chatId: string, messageId: string, userId?: string): Promise<void> {
+  const graph = await ensureWorldGraph(chatId, userId);
   if (!graph || !spindle.permissions.has("chat_mutation")) {
     return;
   }
@@ -148,7 +156,7 @@ async function processCompletedGeneration(chatId: string, messageId: string): Pr
   sendWorldUpdate(chatId, summarizeWorld(next));
 }
 
-async function ensureWorldGraph(chatId: string): Promise<WorldGraph | null> {
+async function ensureWorldGraph(chatId: string, userId?: string): Promise<WorldGraph | null> {
   const existing = await loadWorldGraph(chatId);
   if (existing) {
     return existing;
@@ -159,7 +167,7 @@ async function ensureWorldGraph(chatId: string): Promise<WorldGraph | null> {
     return null;
   }
 
-  const seedInput = await resolveSeedInput(chatId);
+  const seedInput = await resolveSeedInput(chatId, userId);
   if (!seedInput) {
     return null;
   }
@@ -170,16 +178,23 @@ async function ensureWorldGraph(chatId: string): Promise<WorldGraph | null> {
   return graph;
 }
 
-async function resolveSeedInput(chatId: string) {
+async function resolveSeedInput(chatId: string, userId?: string) {
   let characterId: string | undefined;
   let scenario: string | undefined;
   let fallbackName = "Unknown Principal";
 
   if (spindle.permissions.has("chats")) {
-    const chat = await spindle.chats.get(chatId);
-    characterId = chat?.characterId ?? chat?.character_id ?? undefined;
-    scenario = chat?.scenario ?? undefined;
-    fallbackName = chat?.name ?? fallbackName;
+    try {
+      const chat = await spindle.chats.get(chatId, withUserScope({}, userId));
+      characterId = chat?.characterId ?? chat?.character_id ?? undefined;
+      scenario = chat?.scenario ?? undefined;
+      fallbackName = chat?.name ?? fallbackName;
+    } catch (error) {
+      spindle.log.warn(`LumiWorld: failed to read chat seed data: ${formatError(error)}`);
+      if (isMissingUserScopeError(error)) {
+        return null;
+      }
+    }
   }
 
   if (!characterId) {
@@ -192,7 +207,16 @@ async function resolveSeedInput(chatId: string) {
     };
   }
 
-  const character = await spindle.characters.get(characterId);
+  let character = null;
+  try {
+    character = await spindle.characters.get(characterId, withUserScope({}, userId));
+  } catch (error) {
+    spindle.log.warn(`LumiWorld: failed to read character seed data: ${formatError(error)}`);
+    if (isMissingUserScopeError(error)) {
+      return null;
+    }
+  }
+
   return {
     chatId,
     characterId,
@@ -305,6 +329,10 @@ function getPayloadChatId(payload: any): string | null {
   return payload?.chatId ?? payload?.chat_id ?? null;
 }
 
+function getPayloadUserId(payload: any): string | undefined {
+  return payload?.userId ?? payload?.user_id ?? undefined;
+}
+
 function getTrackedChatId(userId?: string): string | null {
   if (!userId) {
     return null;
@@ -346,8 +374,8 @@ function rememberFrontendChat(userId: string | undefined, chatId: string | null)
   frontendChatByUser.set(userId, chatId);
 }
 
-async function resolveActiveChatId(): Promise<string | null> {
-  if (activeChatId) {
+async function resolveActiveChatId(userId?: string): Promise<string | null> {
+  if (!userId && activeChatId) {
     return activeChatId;
   }
 
@@ -355,13 +383,24 @@ async function resolveActiveChatId(): Promise<string | null> {
     return null;
   }
 
-  const active = await spindle.chats.getActive();
-  activeChatId = active?.id ?? null;
-  return activeChatId;
+  try {
+    const active = await spindle.chats.getActive(withUserScope({}, userId));
+    if (!userId) {
+      activeChatId = active?.id ?? null;
+    }
+    return active?.id ?? null;
+  } catch (error) {
+    spindle.log.warn(`LumiWorld: failed to resolve active chat: ${formatError(error)}`);
+    return null;
+  }
 }
 
 function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function isMissingUserScopeError(error: unknown): boolean {
+  return formatError(error).includes(OPERATOR_SCOPE_USER_ID_ERROR);
 }
 
 function withUserScope<T extends { userId?: string }>(options: T, userId?: string): T {
