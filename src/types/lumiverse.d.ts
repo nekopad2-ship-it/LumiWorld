@@ -1,6 +1,8 @@
 type LumiverseStorageApi = {
-  readText(path: string): Promise<string | null>;
-  writeText(path: string, content: string): Promise<void>;
+  read(path: string): Promise<string>;
+  write(path: string, content: string): Promise<void>;
+  getJson<T>(path: string, options?: { fallback?: T; userId?: string }): Promise<T>;
+  setJson(path: string, value: unknown, options?: { indent?: number; userId?: string }): Promise<void>;
 };
 
 type LumiverseCharacterRecord = {
@@ -56,20 +58,30 @@ declare const spindle: {
     info?(message: string): void;
     success?(message: string): void;
   };
-  sendToFrontend(payload: unknown): void;
-  onFrontendMessage(handler: (payload: unknown, userId?: string) => void | Promise<void>): void;
+  sendToFrontend(payload: unknown, userId?: string): void;
+  onFrontendMessage(handler: (payload: unknown, userId?: string) => void | Promise<void>): () => void;
   on(event: string, handler: (payload: any) => void | Promise<void>): void;
-  log(...args: unknown[]): void;
+  log: {
+    info(message: string): void;
+    warn(message: string): void;
+    error(message: string): void;
+  };
 };
 
 type LumiverseDrawerTabHandle = {
+  root: HTMLElement;
   activate(): void;
+  destroy(): void;
 };
 
 type LumiverseFloatWidgetHandle = {
+  root: HTMLElement;
   setVisible(visible: boolean): void;
-  setPosition?(position: { x: number; y: number }): void;
-  onDragEnd?(handler: (position: { x: number; y: number }) => void): void;
+  moveTo(x: number, y: number): void;
+  getPosition(): { x: number; y: number };
+  isVisible(): boolean;
+  destroy(): void;
+  onDragEnd(handler: (position: { x: number; y: number }) => void): () => void;
 };
 
 type LumiverseFrontendContext = {
@@ -77,22 +89,28 @@ type LumiverseFrontendContext = {
     registerDrawerTab(options: {
       id: string;
       title: string;
-      icon?: string;
-      render(root: HTMLElement): void;
+      shortName?: string;
+      description?: string;
+      headerTitle?: string;
+      iconSvg?: string;
+      iconUrl?: string;
     }): LumiverseDrawerTabHandle;
     createFloatWidget(options: {
-      id: string;
-      title?: string;
-      position?: { x: number; y: number };
-      render(root: HTMLElement): void;
+      width: number;
+      height: number;
+      initialPosition?: { x: number; y: number };
+      snapToEdge?: boolean;
+      tooltip?: string;
+      chromeless?: boolean;
     }): LumiverseFloatWidgetHandle;
   };
   events: {
-    on(event: string, handler: (payload: any) => void | Promise<void>): void;
+    on(event: string, handler: (payload: any) => void | Promise<void>): () => void;
   };
   dom: {
-    addStyle(css: string): void;
+    addStyle(css: string): () => void;
+    cleanup(): void;
   };
   sendToBackend(payload: unknown): void;
-  onBackendMessage(handler: (payload: unknown) => void): void;
+  onBackendMessage(handler: (payload: unknown) => void): () => void;
 };

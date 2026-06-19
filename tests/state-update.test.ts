@@ -40,6 +40,99 @@ describe("STATE_UPDATE parsing", () => {
     expect(result.rawBlock).toContain("[STATE_UPDATE]");
   });
 
+  test("rejects contract-invalid JSON that is syntactically valid", () => {
+    const invalidBlocks = [
+      {
+        name: "missing required arrays",
+        payload: {
+          sceneCast: {
+            active: ["mira"],
+            nearby: [],
+            offscreen: [],
+          },
+          timeAdvance: null,
+          npcDeltas: [],
+          edgeDeltas: [],
+          secretDeltas: [],
+          hookDeltas: [],
+          playerDeltas: {},
+        },
+      },
+      {
+        name: "wrong sceneCast scalar type",
+        payload: {
+          sceneCast: {
+            active: "mira",
+            nearby: [],
+            offscreen: [],
+          },
+          timeAdvance: null,
+          npcDeltas: [],
+          edgeDeltas: [],
+          secretDeltas: [],
+          hookDeltas: [],
+          playerDeltas: {},
+          newEntities: [],
+        },
+      },
+      {
+        name: "wrong nested delta type",
+        payload: {
+          sceneCast: {
+            active: ["mira"],
+            nearby: [],
+            offscreen: [],
+          },
+          timeAdvance: null,
+          npcDeltas: [
+            {
+              id: "mira",
+              emotionalStateNow: {
+                dominant: "tense",
+                intensity: "high",
+              },
+            },
+          ],
+          edgeDeltas: [],
+          secretDeltas: [],
+          hookDeltas: [],
+          playerDeltas: {},
+          newEntities: [],
+        },
+      },
+      {
+        name: "wrong inventory item type",
+        payload: {
+          sceneCast: {
+            active: ["mira"],
+            nearby: [],
+            offscreen: [],
+          },
+          timeAdvance: null,
+          npcDeltas: [],
+          edgeDeltas: [],
+          secretDeltas: [],
+          hookDeltas: [],
+          playerDeltas: {
+            inventory: {
+              add: ["sealed letter", 7],
+            },
+          },
+          newEntities: [],
+        },
+      },
+    ];
+
+    for (const invalidBlock of invalidBlocks) {
+      const wrapped = `Visible text\n\n[STATE_UPDATE]\n${JSON.stringify(invalidBlock.payload, null, 2)}\n[/STATE_UPDATE]`;
+      const result = parseStateUpdateEnvelope(wrapped);
+
+      expect(result.found).toBe(true);
+      expect(result.parsed).toBeNull();
+      expect(result.error).toContain("STATE_UPDATE contract");
+    }
+  });
+
   test("strips only the hidden STATE_UPDATE block and leaves visible ledger content behind", () => {
     const stripped = stripStateUpdateBlock(validStateUpdate);
 

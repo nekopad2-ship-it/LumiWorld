@@ -1,6 +1,6 @@
 import { isFrontendToBackendMessage, type BackendToFrontendMessage, type PermissionSnapshot, type UiSettings } from "./shared/messages";
 import { parseCompactLedger, parseStateUpdateEnvelope, stripStateUpdateBlock } from "./shared/parsers";
-import type { WorldGraph } from "./shared/types";
+import type { WorldGraph, WorldSummary } from "./shared/types";
 import { buildWorldDigest, seedWorldGraph, summarizeWorld, applyStateUpdateToWorld } from "./shared/world";
 
 const GRAPH_PATH = (chatId: string) => `worlds/${chatId}/graph.json`;
@@ -15,42 +15,46 @@ type GenerationSession = {
 };
 
 const generationSessions = new Map<string, GenerationSession>();
+const frontendChatByUser = new Map<string, string | null>();
+const frontendUsersByChat = new Map<string, Set<string>>();
 let activeChatId: string | null = null;
 
 setupBackend();
 
 function setupBackend(): void {
-  spindle.onFrontendMessage(async (payload) => {
+  spindle.onFrontendMessage(async (payload, userId) => {
     if (!isFrontendToBackendMessage(payload)) {
       return;
     }
 
     switch (payload.type) {
       case "GET_WORLD_GRAPH": {
-        const chatId = payload.chatId ?? (await resolveActiveChatId());
+        const chatId = payload.chatId ?? (await resolveActiveChatId()) ?? getTrackedChatId(userId);
+        rememberFrontendChat(userId, chatId);
         if (chatId) {
           await ensureWorldGraph(chatId);
-          await sendWorldGraphData(chatId);
+          await sendWorldGraphData(chatId, userId);
         } else {
-          await sendWorldGraphData(null);
+          await sendWorldGraphData(null, userId);
         }
         break;
       }
       case "SAVE_UI_SETTINGS": {
-        const current = await loadUiSettings();
+        const current = await loadUiSettings(userId);
         const next: UiSettings = {
           widgetPosition: payload.ui.widgetPosition ?? current.widgetPosition,
           widgetVisible: payload.ui.widgetVisible ?? current.widgetVisible,
         };
-        await saveUiSettings(next);
+        await saveUiSettings(next, userId);
         break;
       }
       case "OPEN_TRACKER": {
-        spindle.sendToFrontend({ type: "OPEN_TRACKER" } satisfies BackendToFrontendMessage);
+        sendFrontendMessage({ type: "OPEN_TRACKER" } satisfies BackendToFrontendMessage, userId);
         break;
       }
     }
   });
+  spindle.log.info("LumiWorld backend loaded");
 
   spindle.on("CHAT_SWITCHED", async (payload) => {
     activeChatId = getPayloadChatId(payload) ?? activeChatId;
@@ -59,7 +63,7 @@ function setupBackend(): void {
     }
 
     await ensureWorldGraph(activeChatId);
-    await sendWorldGraphData(activeChatId);
+    await sendWorldGraphDataToTrackedUsers(activeChatId);
   });
 
   spindle.on("CHARACTER_MESSAGE_RENDERED", async (payload) => {
@@ -131,21 +135,17 @@ async function processCompletedGeneration(chatId: string, messageId: string): Pr
 
   if (!parsedStateUpdate.found || !parsedStateUpdate.parsed) {
     if (parsedStateUpdate.rawBlock) {
-      await spindle.storage.writeText(DEBUG_PATH(chatId), parsedStateUpdate.rawBlock);
+      await spindle.storage.write(DEBUG_PATH(chatId), parsedStateUpdate.rawBlock);
     }
     spindle.toast?.error?.("LumiWorld skipped this turn because the hidden state update was invalid.");
-    spindle.log("LumiWorld: invalid or missing STATE_UPDATE", parsedStateUpdate.error);
+    spindle.log.warn(`LumiWorld: invalid or missing STATE_UPDATE: ${parsedStateUpdate.error ?? "unknown error"}`);
     return;
   }
 
   const next = applyStateUpdateToWorld(graph, parsedStateUpdate.parsed, ledger);
   await saveWorldGraph(next);
   await writeDigest(chatId, next);
-  spindle.sendToFrontend({
-    type: "WORLD_UPDATED",
-    chatId,
-    summary: summarizeWorld(next),
-  } satisfies BackendToFrontendMessage);
+  sendWorldUpdate(chatId, summarizeWorld(next));
 }
 
 async function ensureWorldGraph(chatId: string): Promise<WorldGraph | null> {
@@ -155,7 +155,7 @@ async function ensureWorldGraph(chatId: string): Promise<WorldGraph | null> {
   }
 
   if (!spindle.permissions.has("characters")) {
-    spindle.log("LumiWorld: missing characters permission, cannot seed graph");
+    spindle.log.warn("LumiWorld: missing characters permission, cannot seed graph");
     return null;
   }
 
@@ -203,7 +203,7 @@ async function resolveSeedInput(chatId: string) {
 }
 
 async function loadWorldGraph(chatId: string): Promise<WorldGraph | null> {
-  const raw = await spindle.storage.readText(GRAPH_PATH(chatId));
+  const raw = await spindle.storage.read(GRAPH_PATH(chatId)).catch(() => "");
   if (!raw) {
     return null;
   }
@@ -211,45 +211,37 @@ async function loadWorldGraph(chatId: string): Promise<WorldGraph | null> {
   try {
     return JSON.parse(raw) as WorldGraph;
   } catch (error) {
-    spindle.log("LumiWorld: failed to parse graph", error);
+    spindle.log.error(`LumiWorld: failed to parse graph: ${formatError(error)}`);
     return null;
   }
 }
 
 async function saveWorldGraph(graph: WorldGraph): Promise<void> {
-  await spindle.storage.writeText(GRAPH_PATH(graph.chatId), JSON.stringify(graph, null, 2));
+  await spindle.storage.write(GRAPH_PATH(graph.chatId), JSON.stringify(graph, null, 2));
 }
 
 async function writeDigest(chatId: string, graph: WorldGraph): Promise<void> {
   await spindle.variables.chat.set(chatId, CHAT_VARIABLE_KEY, buildWorldDigest(graph));
 }
 
-async function loadUiSettings(): Promise<UiSettings> {
+async function loadUiSettings(userId?: string): Promise<UiSettings> {
   const fallback: UiSettings = {
     widgetPosition: { x: 24, y: 24 },
     widgetVisible: true,
   };
-  const raw = await spindle.userStorage.readText(UI_SETTINGS_PATH);
-  if (!raw) {
-    return fallback;
-  }
-
   try {
-    return {
-      ...fallback,
-      ...(JSON.parse(raw) as Partial<UiSettings>),
-    };
+    return await spindle.userStorage.getJson<UiSettings>(UI_SETTINGS_PATH, withUserScope({ fallback }, userId));
   } catch (error) {
-    spindle.log("LumiWorld: failed to parse UI settings", error);
+    spindle.log.error(`LumiWorld: failed to parse UI settings: ${formatError(error)}`);
     return fallback;
   }
 }
 
-async function saveUiSettings(settings: UiSettings): Promise<void> {
-  await spindle.userStorage.writeText(UI_SETTINGS_PATH, JSON.stringify(settings, null, 2));
+async function saveUiSettings(settings: UiSettings, userId?: string): Promise<void> {
+  await spindle.userStorage.setJson(UI_SETTINGS_PATH, settings, withUserScope({ indent: 2 }, userId));
 }
 
-async function sendWorldGraphData(chatId: string | null): Promise<void> {
+async function sendWorldGraphData(chatId: string | null, userId?: string): Promise<void> {
   const graph = chatId ? await loadWorldGraph(chatId) : null;
   const payload: BackendToFrontendMessage = {
     type: "WORLD_GRAPH_DATA",
@@ -257,9 +249,9 @@ async function sendWorldGraphData(chatId: string | null): Promise<void> {
     graph,
     summary: summarizeWorld(graph),
     permissions: getPermissionSnapshot(),
-    ui: await loadUiSettings(),
+    ui: await loadUiSettings(userId),
   };
-  spindle.sendToFrontend(payload);
+  sendFrontendMessage(payload, userId);
 }
 
 function getPermissionSnapshot(): PermissionSnapshot {
@@ -276,8 +268,82 @@ function getGenerationKey(payload: any): string {
   return String(payload?.generationId ?? payload?.generation_id ?? payload?.id ?? payload?.chatId ?? "unknown");
 }
 
+function sendWorldUpdate(chatId: string, summary: WorldSummary): void {
+  const userIds = getTrackedUserIds(chatId);
+  if (userIds.length === 0) {
+    return;
+  }
+
+  const payload = {
+    type: "WORLD_UPDATED",
+    chatId,
+    summary,
+  } satisfies BackendToFrontendMessage;
+
+  for (const userId of userIds) {
+    sendFrontendMessage(payload, userId);
+  }
+}
+
+async function sendWorldGraphDataToTrackedUsers(chatId: string): Promise<void> {
+  const userIds = getTrackedUserIds(chatId);
+  for (const userId of userIds) {
+    await sendWorldGraphData(chatId, userId);
+  }
+}
+
+function sendFrontendMessage(payload: BackendToFrontendMessage, userId?: string): void {
+  if (userId) {
+    spindle.sendToFrontend(payload, userId);
+    return;
+  }
+
+  spindle.sendToFrontend(payload);
+}
+
 function getPayloadChatId(payload: any): string | null {
   return payload?.chatId ?? payload?.chat_id ?? null;
+}
+
+function getTrackedChatId(userId?: string): string | null {
+  if (!userId) {
+    return null;
+  }
+
+  return frontendChatByUser.get(userId) ?? null;
+}
+
+function getTrackedUserIds(chatId: string): string[] {
+  return [...(frontendUsersByChat.get(chatId) ?? [])];
+}
+
+function rememberFrontendChat(userId: string | undefined, chatId: string | null): void {
+  if (!userId) {
+    return;
+  }
+
+  const previousChatId = frontendChatByUser.get(userId) ?? null;
+  if (previousChatId === chatId) {
+    return;
+  }
+
+  if (previousChatId) {
+    const previousUsers = frontendUsersByChat.get(previousChatId);
+    previousUsers?.delete(userId);
+    if (previousUsers && previousUsers.size === 0) {
+      frontendUsersByChat.delete(previousChatId);
+    }
+  }
+
+  if (!chatId) {
+    frontendChatByUser.delete(userId);
+    return;
+  }
+
+  const users = frontendUsersByChat.get(chatId) ?? new Set<string>();
+  users.add(userId);
+  frontendUsersByChat.set(chatId, users);
+  frontendChatByUser.set(userId, chatId);
 }
 
 async function resolveActiveChatId(): Promise<string | null> {
@@ -292,4 +358,19 @@ async function resolveActiveChatId(): Promise<string | null> {
   const active = await spindle.chats.getActive();
   activeChatId = active?.id ?? null;
   return activeChatId;
+}
+
+function formatError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function withUserScope<T extends { userId?: string }>(options: T, userId?: string): T {
+  if (!userId) {
+    return options;
+  }
+
+  return {
+    ...options,
+    userId,
+  };
 }

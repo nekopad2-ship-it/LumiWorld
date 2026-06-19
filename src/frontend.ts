@@ -32,33 +32,26 @@ const defaultState: FrontendState = {
   currentView: "people",
 };
 
-export function setup(ctx: LumiverseFrontendContext): void {
+export function setup(ctx: LumiverseFrontendContext): () => void {
   const state: FrontendState = structuredClone(defaultState);
-  let drawerRoot: HTMLElement | null = null;
-  let widgetRoot: HTMLElement | null = null;
-  let widget: LumiverseFloatWidgetHandle | null = null;
-
-  ctx.dom.addStyle(styles);
-
+  const removeStyle = ctx.dom.addStyle(styles);
   const drawer = ctx.ui.registerDrawerTab({
     id: "lumiworld",
     title: "LumiWorld",
-    icon: "sparkles",
-    render(root) {
-      drawerRoot = root;
-      renderDrawer();
-    },
+    shortName: "Lumi",
+    description: "Living-world tracking for the current RP chat.",
+    headerTitle: "LumiWorld",
   });
-
-  ctx.onBackendMessage((payload) => {
+  const drawerRoot = drawer.root;
+  let widgetRoot: HTMLElement | null = null;
+  let widget: LumiverseFloatWidgetHandle | null = null;
+  let unsubWidgetDragEnd: (() => void) | null = null;
+  const unsubBackend = ctx.onBackendMessage((payload) => {
     handleBackendMessage(payload);
   });
 
-  ctx.events.on("CHAT_SWITCHED", () => {
-    requestHydrate();
-  });
-
   requestHydrate();
+  renderDrawer();
 
   function handleBackendMessage(payload: unknown): void {
     const message = payload as BackendToFrontendMessage;
@@ -68,6 +61,8 @@ export function setup(ctx: LumiverseFrontendContext): void {
 
     if (message.type === "WORLD_UPDATED") {
       state.summary = message.summary;
+      renderDrawer();
+      renderWidget();
       updateWidgetVisibility();
       requestHydrate(message.chatId);
       return;
@@ -77,7 +72,7 @@ export function setup(ctx: LumiverseFrontendContext): void {
       state.graph = message.graph;
       state.summary = message.summary;
       state.permissions = message.permissions;
-      state.ui = message.ui;
+      state.ui = normalizeUiSettings(message.ui);
       ensureWidget();
       renderDrawer();
       renderWidget();
@@ -99,9 +94,22 @@ export function setup(ctx: LumiverseFrontendContext): void {
   }
 
   function saveUiSettings(partial: Partial<UiSettings>): void {
+    const normalized = normalizeUiSettings({
+      ...state.ui,
+      ...partial,
+    });
+    const next: Partial<UiSettings> = {};
+
+    if (partial.widgetPosition) {
+      next.widgetPosition = normalized.widgetPosition;
+    }
+    if (typeof partial.widgetVisible === "boolean") {
+      next.widgetVisible = normalized.widgetVisible;
+    }
+
     ctx.sendToBackend({
       type: "SAVE_UI_SETTINGS",
-      ui: partial,
+      ui: next,
     } satisfies FrontendToBackendMessage);
   }
 
@@ -111,20 +119,15 @@ export function setup(ctx: LumiverseFrontendContext): void {
     }
 
     widget = ctx.ui.createFloatWidget({
-      id: "lumiworld-widget",
-      title: "LumiWorld",
-      position: state.ui.widgetPosition,
-      render(root) {
-        widgetRoot = root;
-        renderWidget();
-      },
+      width: 280,
+      height: 188,
+      initialPosition: state.ui.widgetPosition,
+      tooltip: "LumiWorld",
+      chromeless: true,
     });
-
-    if (widget.setPosition) {
-      widget.setPosition(state.ui.widgetPosition);
-    }
-
-    widget.onDragEnd?.((position) => {
+    widgetRoot = widget.root;
+    renderWidget();
+    unsubWidgetDragEnd = widget.onDragEnd((position) => {
       state.ui.widgetPosition = position;
       saveUiSettings({ widgetPosition: position });
     });
@@ -316,8 +319,12 @@ export function setup(ctx: LumiverseFrontendContext): void {
     }
 
     widget.setVisible(Boolean(state.permissions.uiPanels && state.summary.hasWorld && state.ui.widgetVisible));
-    if (state.ui.widgetPosition && widget.setPosition) {
-      widget.setPosition(state.ui.widgetPosition);
+    const currentPosition = widget.getPosition();
+    if (
+      currentPosition.x !== state.ui.widgetPosition.x ||
+      currentPosition.y !== state.ui.widgetPosition.y
+    ) {
+      widget.moveTo(state.ui.widgetPosition.x, state.ui.widgetPosition.y);
     }
   }
 
@@ -342,6 +349,15 @@ export function setup(ctx: LumiverseFrontendContext): void {
 
     return warnings;
   }
+
+  return () => {
+    unsubBackend();
+    unsubWidgetDragEnd?.();
+    widget?.destroy();
+    drawer.destroy();
+    removeStyle();
+    ctx.dom.cleanup();
+  };
 }
 
 function formatKeyValues(record: Record<string, number>): string {
@@ -362,6 +378,22 @@ function escapeHtml(value: string): string {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+}
+
+function normalizeUiSettings(value: Partial<UiSettings> | null | undefined): UiSettings {
+  return {
+    widgetPosition: normalizeWidgetPosition(value?.widgetPosition),
+    widgetVisible: typeof value?.widgetVisible === "boolean" ? value.widgetVisible : defaultState.ui.widgetVisible,
+  };
+}
+
+function normalizeWidgetPosition(
+  position: Partial<UiSettings["widgetPosition"]> | null | undefined,
+): UiSettings["widgetPosition"] {
+  const fallback = defaultState.ui.widgetPosition;
+  const x = typeof position?.x === "number" && Number.isFinite(position.x) ? position.x : fallback.x;
+  const y = typeof position?.y === "number" && Number.isFinite(position.y) ? position.y : fallback.y;
+  return { x, y };
 }
 
 const styles = `

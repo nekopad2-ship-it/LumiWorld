@@ -6,6 +6,11 @@ export type EmotionalState = {
   intensity: number;
 };
 
+export type TimeAdvance = {
+  amount: string;
+  newDescriptor: string;
+};
+
 export type SceneCast = {
   active: string[];
   nearby: string[];
@@ -63,12 +68,12 @@ export type NewEntity = {
 
 export type StateUpdate = {
   sceneCast: SceneCast;
-  timeAdvance: { amount: string; newDescriptor: string } | null;
+  timeAdvance?: TimeAdvance | null;
   npcDeltas: StateUpdateNpcDelta[];
   edgeDeltas: EdgeDelta[];
   secretDeltas: SecretDelta[];
   hookDeltas: HookDelta[];
-  playerDeltas?: PlayerDelta;
+  playerDeltas: PlayerDelta;
   newEntities: NewEntity[];
 };
 
@@ -126,10 +131,7 @@ export type WorldGraph = {
   createdAt: string;
   updatedAt: string;
   scenario?: string;
-  worldTime?: {
-    amount: string;
-    newDescriptor: string;
-  } | null;
+  worldTime?: TimeAdvance | null;
   sceneCast: SceneCast;
   npcs: Record<string, NPCNode>;
   relationships: Record<string, RelationshipEdge>;

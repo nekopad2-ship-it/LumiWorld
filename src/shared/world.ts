@@ -55,12 +55,13 @@ export function applyStateUpdateToWorld(
   stateUpdate: StateUpdate,
   ledger: LedgerData | null,
 ): WorldGraph {
+  const previousActiveIds = new Set(graph.sceneCast.active);
   const next = structuredClone(graph);
   next.updatedAt = new Date().toISOString();
   next.sceneCast = {
     ...stateUpdate.sceneCast,
   };
-  next.worldTime = stateUpdate.timeAdvance;
+  next.worldTime = stateUpdate.timeAdvance ?? null;
 
   applyLedger(next, ledger);
 
@@ -134,49 +135,48 @@ export function applyStateUpdateToWorld(
     lifecycle: hook.lifecycle,
   }));
 
-  if (stateUpdate.playerDeltas?.attire) {
+  if (stateUpdate.playerDeltas.attire) {
     next.player.attire = stateUpdate.playerDeltas.attire;
   }
-  if (stateUpdate.playerDeltas?.physicalState) {
+  if (stateUpdate.playerDeltas.physicalState) {
     next.player.physicalState = stateUpdate.playerDeltas.physicalState;
   }
-  if (stateUpdate.playerDeltas?.inventory?.add?.length) {
+  if (stateUpdate.playerDeltas.inventory?.add?.length) {
     for (const item of stateUpdate.playerDeltas.inventory.add) {
       if (!next.player.inventory.includes(item)) {
         next.player.inventory.push(item);
       }
     }
   }
-  if (stateUpdate.playerDeltas?.inventory?.remove?.length) {
+  if (stateUpdate.playerDeltas.inventory?.remove?.length) {
     next.player.inventory = next.player.inventory.filter(
-      (item) => !stateUpdate.playerDeltas?.inventory?.remove?.includes(item),
+      (item) => !stateUpdate.playerDeltas.inventory?.remove?.includes(item),
     );
   }
 
-  for (const activeId of next.sceneCast.active) {
-    const npc = next.npcs[activeId];
-    if (npc) {
-      npc.sceneTurnCount += 1;
-      if (npc.tier === "stranger" && npc.sceneTurnCount >= 3) {
-        npc.tier = "minor";
-      }
-    }
-  }
+  updateSceneTurnProgression(next, previousActiveIds);
 
   return next;
 }
 
 export function buildWorldDigest(graph: WorldGraph): string {
+  const maxDigestTokens = 200;
   const lines: string[] = [];
 
-  lines.push(
-    `scene: active=${graph.sceneCast.active.join(", ") || "none"}; nearby=${
-      graph.sceneCast.nearby.join(", ") || "none"
-    }; offscreen=${graph.sceneCast.offscreen.join(", ") || "none"}`,
+  appendDigestLine(
+    lines,
+    `scene: active: ${summarizeCastIds(graph.sceneCast.active)} | nearby: ${summarizeCastIds(
+      graph.sceneCast.nearby,
+    )} | offscreen: ${summarizeCastIds(graph.sceneCast.offscreen)}`,
+    maxDigestTokens,
   );
 
   if (graph.worldTime?.newDescriptor) {
-    lines.push(`time: ${graph.worldTime.newDescriptor} (${graph.worldTime.amount})`);
+    appendDigestLine(
+      lines,
+      `time: ${graph.worldTime.newDescriptor} (${graph.worldTime.amount})`,
+      maxDigestTokens,
+    );
   }
 
   for (const id of graph.sceneCast.active) {
@@ -185,30 +185,31 @@ export function buildWorldDigest(graph: WorldGraph): string {
       continue;
     }
 
-    lines.push(
-      `${id}: loc=${npc.physicalState.location ?? "unknown"}; mood=${
+    appendDigestLine(
+      lines,
+      `active: ${id} @ ${npc.physicalState.location ?? "unknown"} | mood: ${
         npc.physicalState.mood ?? npc.emotionalState?.dominant ?? "unknown"
-      }; agenda=${npc.agendaNow ?? "none"}`,
+      } | agenda: ${npc.agendaNow ?? "none"}`,
+      maxDigestTokens,
     );
   }
 
-  if (graph.secrets.length > 0) {
-    lines.push(
-      `secrets: ${graph.secrets
-        .map((secret) => `${secret.secret}(${secret.lifecycle})`)
-        .join(", ")}`,
-    );
+  const pressureSummary = buildPressureSummary(graph);
+  if (pressureSummary) {
+    appendDigestLine(lines, pressureSummary, maxDigestTokens);
   }
 
   if (graph.player.physicalState || graph.player.attire) {
-    lines.push(
-      `player: attire=${graph.player.attire ?? "unknown"}; state=${
+    appendDigestLine(
+      lines,
+      `player: attire: ${graph.player.attire ?? "unknown"} | state: ${
         graph.player.physicalState ?? "unknown"
-      }`,
+      }${graph.player.inventory.length > 0 ? ` | inventory: ${graph.player.inventory.join(", ")}` : ""}`,
+      maxDigestTokens,
     );
   }
 
-  return truncateWords(lines.join("\n"), 200);
+  return lines.join("\n");
 }
 
 export function summarizeWorld(graph: WorldGraph | null): WorldSummary {
@@ -308,7 +309,7 @@ function ensureNpc(graph: WorldGraph, id: string, displayName?: string) {
     graph.npcs[id] = {
       id,
       name: displayName ?? titleCaseFromId(id),
-      tier: "minor",
+      tier: "stranger",
       aliases: displayName ? [displayName] : [titleCaseFromId(id)],
       physicalState: {
         details: [],
@@ -338,11 +339,76 @@ function titleCaseFromId(value: string): string {
     .join(" ");
 }
 
-function truncateWords(value: string, maxWords: number): string {
-  const words = value.split(/\s+/).filter(Boolean);
-  if (words.length <= maxWords) {
+function updateSceneTurnProgression(graph: WorldGraph, previousActiveIds: Set<string>): void {
+  const activeIds = new Set(graph.sceneCast.active);
+
+  for (const npc of Object.values(graph.npcs)) {
+    if (activeIds.has(npc.id)) {
+      npc.sceneTurnCount = previousActiveIds.has(npc.id) ? npc.sceneTurnCount + 1 : 1;
+      if (npc.tier === "stranger" && npc.sceneTurnCount >= 3) {
+        npc.tier = "minor";
+      }
+      continue;
+    }
+
+    npc.sceneTurnCount = 0;
+  }
+}
+
+function buildPressureSummary(graph: WorldGraph): string | null {
+  const pressureItems = [
+    ...graph.secrets.map((secret) => `secret:${secret.secret}[${secret.lifecycle}]`),
+    ...graph.hooks.map((hook) => `hook:${hook.fact}[${hook.lifecycle}]`),
+  ];
+
+  if (pressureItems.length === 0) {
+    return null;
+  }
+
+  return `pressure: ${pressureItems.join("; ")}`;
+}
+
+function summarizeCastIds(ids: string[], limit = 3): string {
+  if (ids.length === 0) {
+    return "none";
+  }
+
+  if (ids.length <= limit) {
+    return ids.join(", ");
+  }
+
+  return `${ids.slice(0, limit).join(", ")} +${ids.length - limit}`;
+}
+
+function appendDigestLine(lines: string[], line: string, maxTokens: number): void {
+  const current = lines.join("\n");
+  const separatorLength = current.length > 0 ? 1 : 0;
+  const remainingChars = maxTokens * 4 - current.length - separatorLength;
+
+  if (remainingChars <= 0) {
+    return;
+  }
+
+  const nextLine = line.length <= remainingChars ? line : truncateToLength(line, remainingChars);
+  const candidate = current.length > 0 ? `${current}\n${nextLine}` : nextLine;
+
+  if (estimateTokens(candidate) <= maxTokens) {
+    lines.push(nextLine);
+  }
+}
+
+function estimateTokens(value: string): number {
+  return Math.ceil(value.length / 4);
+}
+
+function truncateToLength(value: string, maxLength: number): string {
+  if (value.length <= maxLength) {
     return value;
   }
 
-  return `${words.slice(0, maxWords).join(" ")} ...`;
+  if (maxLength <= 3) {
+    return value.slice(0, maxLength);
+  }
+
+  return `${value.slice(0, maxLength - 3).trimEnd()}...`;
 }
