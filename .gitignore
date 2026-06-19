@@ -3,6 +3,7 @@ AGENTS.md
 MLRPE v1.4.6.json
 MLRPE*.json
 *.preset.json
+LWE_DESIGN.md
 
 # Secrets and local environment
 .env
