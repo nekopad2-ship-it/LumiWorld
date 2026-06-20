@@ -51,6 +51,51 @@ export type HookDelta = {
   lifecycle: string;
 };
 
+export type NpcProfile = {
+  role?: string;
+  summary?: string;
+  goals: string[];
+  fears: string[];
+  convictions: string[];
+  selfKnowledge: {
+    known: string[];
+    blindSpots: string[];
+    denied: string[];
+  };
+};
+
+export type NpcDisplayState = {
+  arcs: Array<{
+    arc: string;
+    state?: string;
+  }>;
+  hooks: Array<{
+    arc: string;
+    fact: string;
+    lifecycle: string;
+    state?: string;
+  }>;
+};
+
+export type RelationshipKnowledgeBuckets = {
+  mutual: string[];
+  fromKnows: string[];
+  toKnows: string[];
+  publicRumors: string[];
+};
+
+export type RelationshipBoundaryState = {
+  state: string;
+  qualifyingEvent?: string;
+};
+
+export type RelationshipQualifyingEventAudit = {
+  event: string;
+  axes: string[];
+  publicFaceShift?: number;
+  boundaryDomains: string[];
+};
+
 export type PlayerDelta = {
   attire?: string;
   inventory?: {
@@ -113,6 +158,8 @@ export type NPCNode = {
   secrets: Array<{ secret: string; lifecycle: string; suspects: string[]; evidence: string[] }>;
   hooks: Array<{ arc: string; fact: string; lifecycle: string }>;
   description?: string;
+  profile?: NpcProfile;
+  display?: NpcDisplayState;
 };
 
 export type RelationshipEdge = {
@@ -122,6 +169,15 @@ export type RelationshipEdge = {
   momentary: Record<string, number>;
   boundaryChanges: Record<string, string>;
   qualifyingEvents: string[];
+  knowledgeBuckets?: RelationshipKnowledgeBuckets;
+  publicFace?: {
+    score: number;
+  };
+  betrayalScar?: {
+    score: number;
+  };
+  boundaryStates?: Record<string, RelationshipBoundaryState>;
+  qualifyingEventAudit?: RelationshipQualifyingEventAudit[];
 };
 
 export type WorldGraph = {

@@ -185,7 +185,7 @@ async function resolveSeedInput(chatId: string, userId?: string) {
 
   if (spindle.permissions.has("chats")) {
     try {
-      const chat = await spindle.chats.get(chatId, withUserScope({}, userId));
+      const chat = await spindle.chats.get(chatId, userId);
       characterId = chat?.characterId ?? chat?.character_id ?? undefined;
       scenario = chat?.scenario ?? undefined;
       fallbackName = chat?.name ?? fallbackName;
@@ -209,7 +209,7 @@ async function resolveSeedInput(chatId: string, userId?: string) {
 
   let character = null;
   try {
-    character = await spindle.characters.get(characterId, withUserScope({}, userId));
+    character = await spindle.characters.get(characterId, userId);
   } catch (error) {
     spindle.log.warn(`LumiWorld: failed to read character seed data: ${formatError(error)}`);
     if (isMissingUserScopeError(error)) {
@@ -384,7 +384,7 @@ async function resolveActiveChatId(userId?: string): Promise<string | null> {
   }
 
   try {
-    const active = await spindle.chats.getActive(withUserScope({}, userId));
+    const active = await spindle.chats.getActive(userId);
     if (!userId) {
       activeChatId = active?.id ?? null;
     }

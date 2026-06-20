@@ -1,5 +1,7 @@
 import type {
   LedgerData,
+  NpcDisplayState,
+  NpcProfile,
   RelationshipEdge,
   SeedWorldGraphInput,
   StateUpdate,
@@ -39,6 +41,8 @@ export function seedWorldGraph(input: SeedWorldGraphInput): WorldGraph {
         secrets: [],
         hooks: [],
         description: input.characterDescription,
+        profile: createNpcProfile(input.characterDescription),
+        display: createNpcDisplayState(),
       },
     },
     relationships: {},
@@ -57,6 +61,7 @@ export function applyStateUpdateToWorld(
 ): WorldGraph {
   const previousActiveIds = new Set(graph.sceneCast.active);
   const next = structuredClone(graph);
+  normalizeWorldGraph(next);
   next.updatedAt = new Date().toISOString();
   next.sceneCast = {
     ...stateUpdate.sceneCast,
@@ -111,14 +116,31 @@ export function applyStateUpdateToWorld(
     if (typeof edgeDelta.publicFaceShift === "number") {
       relationship.durable.public_face =
         (relationship.durable.public_face ?? 0) + edgeDelta.publicFaceShift;
+      relationship.publicFace ??= { score: 0 };
+      relationship.publicFace.score = relationship.durable.public_face;
     }
 
     for (const [domain, state] of Object.entries(edgeDelta.boundaryChanges ?? {})) {
       relationship.boundaryChanges[domain] = state;
+      relationship.boundaryStates ??= {};
+      relationship.boundaryStates[domain] = {
+        state,
+        qualifyingEvent: edgeDelta.qualifyingEvent,
+      };
     }
+
+    relationship.betrayalScar ??= { score: 0 };
+    relationship.betrayalScar.score = relationship.durable.betrayal_scar ?? 0;
 
     if (edgeDelta.qualifyingEvent) {
       relationship.qualifyingEvents.push(edgeDelta.qualifyingEvent);
+      relationship.qualifyingEventAudit ??= [];
+      relationship.qualifyingEventAudit.push({
+        event: edgeDelta.qualifyingEvent,
+        axes: Object.keys(edgeDelta.durableChanges ?? {}).sort(),
+        publicFaceShift: edgeDelta.publicFaceShift,
+        boundaryDomains: Object.keys(edgeDelta.boundaryChanges ?? {}).sort(),
+      });
     }
   }
 
@@ -275,8 +297,23 @@ export function ensureRelationship(
       momentary: {},
       boundaryChanges: {},
       qualifyingEvents: [],
+      knowledgeBuckets: {
+        mutual: [],
+        fromKnows: [],
+        toKnows: [],
+        publicRumors: [],
+      },
+      publicFace: {
+        score: 0,
+      },
+      betrayalScar: {
+        score: 0,
+      },
+      boundaryStates: {},
+      qualifyingEventAudit: [],
     };
   }
+  backfillRelationship(graph.relationships[key]);
   return graph.relationships[key];
 }
 
@@ -317,10 +354,79 @@ function ensureNpc(graph: WorldGraph, id: string, displayName?: string) {
       sceneTurnCount: 0,
       secrets: [],
       hooks: [],
+      profile: createNpcProfile(),
+      display: createNpcDisplayState(),
     };
   }
 
+  backfillNpc(graph.npcs[id], displayName);
+
   return graph.npcs[id];
+}
+
+function normalizeWorldGraph(graph: WorldGraph): void {
+  for (const npc of Object.values(graph.npcs)) {
+    backfillNpc(npc);
+  }
+
+  for (const relationship of Object.values(graph.relationships)) {
+    backfillRelationship(relationship);
+  }
+}
+
+function createNpcProfile(summary?: string): NpcProfile {
+  return {
+    ...(summary ? { summary } : {}),
+    goals: [],
+    fears: [],
+    convictions: [],
+    selfKnowledge: {
+      known: [],
+      blindSpots: [],
+      denied: [],
+    },
+  };
+}
+
+function createNpcDisplayState(): NpcDisplayState {
+  return {
+    arcs: [],
+    hooks: [],
+  };
+}
+
+function backfillNpc(
+  npc: WorldGraph["npcs"][string],
+  displayName?: string,
+): void {
+  npc.aliases ??= [displayName ?? npc.name ?? titleCaseFromId(npc.id)];
+  npc.physicalState ??= { details: [] };
+  npc.physicalState.details ??= [];
+  npc.secrets ??= [];
+  npc.hooks ??= [];
+  npc.profile ??= createNpcProfile(npc.description);
+  npc.display ??= createNpcDisplayState();
+}
+
+function backfillRelationship(relationship: RelationshipEdge): void {
+  relationship.durable ??= {};
+  relationship.momentary ??= {};
+  relationship.boundaryChanges ??= {};
+  relationship.qualifyingEvents ??= [];
+  relationship.knowledgeBuckets ??= {
+    mutual: [],
+    fromKnows: [],
+    toKnows: [],
+    publicRumors: [],
+  };
+  relationship.publicFace ??= {
+    score: relationship.durable.public_face ?? 0,
+  };
+  relationship.betrayalScar ??= {
+    score: relationship.durable.betrayal_scar ?? 0,
+  };
+  relationship.boundaryStates ??= {};
+  relationship.qualifyingEventAudit ??= [];
 }
 
 function slugify(value: string): string {

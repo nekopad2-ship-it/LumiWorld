@@ -12,10 +12,6 @@ type LumiverseCharacterRecord = {
   scenario?: string;
 };
 
-type LumiverseUserScopedOptions = {
-  userId?: string;
-};
-
 type LumiverseChatRecord = {
   id?: string;
   name?: string;
@@ -42,11 +38,11 @@ declare const spindle: {
     };
   };
   characters: {
-    get(characterId: string, options?: LumiverseUserScopedOptions): Promise<LumiverseCharacterRecord | null>;
+    get(characterId: string, userId?: string): Promise<LumiverseCharacterRecord | null>;
   };
   chats: {
-    get(chatId: string, options?: LumiverseUserScopedOptions): Promise<LumiverseChatRecord | null>;
-    getActive(options?: LumiverseUserScopedOptions): Promise<LumiverseChatRecord | null>;
+    get(chatId: string, userId?: string): Promise<LumiverseChatRecord | null>;
+    getActive(userId?: string): Promise<LumiverseChatRecord | null>;
   };
   chat: {
     getMessages(chatId: string): Promise<LumiverseMessageRecord[]>;
