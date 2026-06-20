@@ -23,7 +23,14 @@ export type StateUpdateEnvelope = {
 };
 
 export function parseStateUpdateEnvelope(content: string): StateUpdateEnvelope {
-  const match = content.match(/^\[STATE_UPDATE\][\t ]*\r?\n([\s\S]*?)^\[\/STATE_UPDATE\][\t ]*$/m);
+  // Strip reasoning/thinking fenced regions so a STATE_UPDATE that appears only
+  // inside a model's reasoning block is never committed. (Design §10.)
+  const strippedReasoning = content
+    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, "")
+    .replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, "")
+    .replace(/<reflection>[\s\S]*?<\/reflection>/gi, "");
+
+  const match = strippedReasoning.match(/^\[STATE_UPDATE\][\t ]*\r?\n([\s\S]*?)^\[\/STATE_UPDATE\][\t ]*$/m);
   if (!match) {
     return {
       found: false,

@@ -141,6 +141,27 @@ describe("STATE_UPDATE parsing", () => {
     expect(stripped).toContain("<details><summary>🗃️ Cast State</summary>");
     expect(stripped).toContain("The market fell quiet");
   });
+
+  test("ignores a STATE_UPDATE that appears only inside a reasoning block", () => {
+    const reasoningOnly = [
+      "Some prose.",
+      "<thinking>",
+      "[STATE_UPDATE]",
+      JSON.stringify({
+        sceneCast: { active: ["mira"], nearby: [], offscreen: [] },
+        npcDeltas: [],
+        edgeDeltas: [],
+        secretDeltas: [],
+        hookDeltas: [],
+        playerDeltas: {},
+        newEntities: [],
+      }),
+      "[/STATE_UPDATE]",
+      "</thinking>",
+    ].join("\n");
+    const result = parseStateUpdateEnvelope(reasoningOnly);
+    expect(result.found).toBe(false);
+  });
 });
 
 describe("compact ledger parsing", () => {
