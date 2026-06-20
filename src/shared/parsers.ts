@@ -654,8 +654,12 @@ export function stripStateUpdateBlock(content: string): string {
 }
 
 export function parseCompactLedger(content: string): LedgerData | null {
-  const match = content.match(/<details>\s*<summary>[\s\S]*?Cast State[\s\S]*?<\/details>/i);
+  const match = content.match(/<details>[\s\S]*?<\/details>/i);
   if (!match) {
+    return null;
+  }
+  // Must contain at least one canonical ledger row marker to count as the Cast State Ledger.
+  if (!/\*\*(Focus|Cast|Bonds\/social|Known pressure|<user>):\*\*/i.test(match[0])) {
     return null;
   }
 
@@ -712,21 +716,24 @@ export function parseCompactLedger(content: string): LedgerData | null {
   return result;
 }
 
+const LOCATION_HINTS = /\b(market|tavern|inn|tower|gate|keep|hall|room|street|alley|bridge|dock|forest|camp|road|square|chamber|cellar|rooftop|garden)\b/i;
+
 export function parseLedgerEntry(line: string): LedgerEntry | null {
   const [namePart, detailPart] = line.split(/\s+[—-]\s+/u, 2);
   if (!namePart || !detailPart) {
     return null;
   }
+  const details = detailPart.split(";").map((part) => part.trim()).filter(Boolean);
 
-  const details = detailPart
-    .split(";")
-    .map((part) => part.trim())
-    .filter(Boolean);
+  let location: string | undefined;
+  let mood: string | undefined;
+  if (details.length >= 2) {
+    location = details.find((d) => LOCATION_HINTS.test(d)) ?? details[0];
+    mood = details.find((d) => d !== location) ?? details[1];
+  } else if (details.length === 1) {
+    // Single segment: ambiguous — leave location unset rather than mis-slotting.
+    mood = details[0];
+  }
 
-  return {
-    name: namePart.trim(),
-    location: details[0],
-    mood: details[1],
-    details,
-  };
+  return { name: namePart.trim(), location, mood, details };
 }

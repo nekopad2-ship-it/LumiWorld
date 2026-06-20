@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 
 import {
   parseCompactLedger,
+  parseLedgerEntry,
   parseStateUpdateEnvelope,
   stripStateUpdateBlock,
 } from "../src/shared/parsers";
@@ -152,5 +153,28 @@ describe("compact ledger parsing", () => {
     expect(parsed?.cast.map((entry) => entry.name)).toEqual(["Draven", "Innkeeper Bo"]);
     expect(parsed?.player?.physicalState).toContain("shallow cut");
     expect(parsed?.knownPressure.join(" ")).toContain("sealed letter");
+  });
+});
+
+describe("ledger parsing robustness", () => {
+  test("parseLedgerEntry tolerates a Cast row with mood but no explicit location", () => {
+    const entry = parseLedgerEntry("Mira — guarded");
+    expect(entry?.name).toBe("Mira");
+    expect(entry?.details).toContain("guarded");
+    // Do not assert location==='guarded' — we want no crash + sensible details.
+    expect(entry?.location).toBeFalsy();
+  });
+
+  test("parseCompactLedger still parses the canonical fixture", () => {
+    const data = parseCompactLedger(compactLedger);
+    expect(data).not.toBeNull();
+    expect(data?.focus?.name).toBeTruthy();
+  });
+
+  test("parseCompactLedger tolerates a summary without the word 'Cast State'", () => {
+    const alt = `<details><summary>🗃️ Ledger</summary>\n**Focus:** Mira — market; guarded\n</details>`;
+    const data = parseCompactLedger(alt);
+    // Must not throw; either parses or returns null cleanly.
+    expect(data === null || typeof data.focus === "object").toBe(true);
   });
 });
