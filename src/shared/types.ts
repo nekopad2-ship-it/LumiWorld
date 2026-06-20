@@ -183,7 +183,7 @@ export type RelationshipEdge = {
 export type WorldGraph = {
   chatId: string;
   characterId?: string;
-  detectedPreset: "mlrpe";
+  detectedPreset: string; // display-only, never a behavior flag (design §10)
   createdAt: string;
   updatedAt: string;
   scenario?: string;

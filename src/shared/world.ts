@@ -15,7 +15,7 @@ export function seedWorldGraph(input: SeedWorldGraphInput): WorldGraph {
   return {
     chatId: input.chatId,
     characterId: input.characterId,
-    detectedPreset: "mlrpe",
+    detectedPreset: inferDetectedPreset(input.scenario),
     createdAt: now,
     updatedAt: now,
     scenario: input.scenario,
@@ -457,6 +457,14 @@ function slugify(value: string): string {
     .trim()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
+}
+
+function inferDetectedPreset(scenario?: string): string {
+  // Heuristic only — display label, never gates behavior.
+  // TODO(phase-1.5): richer preset detection
+  const text = (scenario ?? "").toLowerCase();
+  if (text.includes("mlrpe")) return "mlrpe";
+  return "unknown";
 }
 
 function titleCaseFromId(value: string): string {
