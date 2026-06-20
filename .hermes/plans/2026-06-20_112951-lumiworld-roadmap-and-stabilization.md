@@ -713,9 +713,10 @@ Mark tasks `- [ ]` → `- [x]` as completed.
 - [ ] P0-7 (opt): backend test harness
 
 **Phase 1 — Bridge Contract**
-- [ ] P1-1: verify {{@}}/{{#if}} macro support
-- [ ] P1-2: decide beatFocal/beatDriver fate
-- [ ] P1-3: author Block A + Block B, end-to-end test
+- [x] P1-1: verify {{@}}/{{#if}} macro support — DONE: {{#if}} NOT supported; always-emit approach chosen
+- [x] P1-2: decide beatFocal/beatDriver fate — DONE: keep optional, map to MLRPE focus/pressure
+- [x] P1-3: author Block A + Block B — DONE: docs/mlrpe-bridge-blocks.md drafted (pending live test)
+- [ ] P1-3b: USER tests Block A + Block B in live MLRPE chat, confirms model emits [STATE_UPDATE]
 
 **Phase 1.5 — Data Model**
 - [ ] P1.5-1: add block 9/10/11/13 enum types
