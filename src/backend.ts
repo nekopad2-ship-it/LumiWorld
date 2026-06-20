@@ -21,6 +21,9 @@ const frontendChatByUser = new Map<string, string | null>();
 const frontendUsersByChat = new Map<string, Set<string>>();
 let activeChatId: string | null = null;
 
+// Message ids that were produced by swipe/edit/regen — never commit world state for these.
+const lockedMessageIds = new Set<string>();
+
 setupBackend();
 
 function setupBackend(): void {
@@ -95,6 +98,15 @@ function setupBackend(): void {
     generationSessions.delete(getGenerationKey(payload));
   });
 
+  spindle.on("MESSAGE_SWIPED", (payload) => {
+    const id = payload?.messageId ?? payload?.message_id;
+    if (id) lockedMessageIds.add(id);
+  });
+  spindle.on("MESSAGE_EDITED", (payload) => {
+    const id = payload?.messageId ?? payload?.message_id;
+    if (id) lockedMessageIds.add(id);
+  });
+
   spindle.on("GENERATION_ENDED", async (payload) => {
     const key = getGenerationKey(payload);
     const session = generationSessions.get(key);
@@ -116,44 +128,54 @@ function setupBackend(): void {
 }
 
 async function processCompletedGeneration(chatId: string, messageId: string, userId?: string): Promise<void> {
+  // Never commit world state for a message produced by swipe/edit/regen.
+  if (lockedMessageIds.has(messageId)) {
+    return;
+  }
+
   const graph = await ensureWorldGraph(chatId, userId);
   if (!graph || !spindle.permissions.has("chat_mutation")) {
     return;
   }
 
-  const messages = await spindle.chat.getMessages(chatId);
-  const assistantMessage =
-    messages.find((message) => message.id === messageId) ??
-    [...messages].reverse().find((message) => message.role === "assistant");
+  try {
+    const messages = await spindle.chat.getMessages(chatId);
+    const assistantMessage =
+      messages.find((message) => message.id === messageId) ??
+      [...messages].reverse().find((message) => message.role === "assistant");
 
-  if (!assistantMessage) {
-    return;
-  }
-
-  const parsedStateUpdate = parseStateUpdateEnvelope(assistantMessage.content);
-  const strippedContent = stripStateUpdateBlock(assistantMessage.content);
-  const ledger = parseCompactLedger(strippedContent);
-
-  if (strippedContent !== assistantMessage.content) {
-    await spindle.chat.updateMessage(chatId, assistantMessage.id, {
-      content: strippedContent,
-      skipChunkRebuild: true,
-    });
-  }
-
-  if (!parsedStateUpdate.found || !parsedStateUpdate.parsed) {
-    if (parsedStateUpdate.rawBlock) {
-      await spindle.storage.write(DEBUG_PATH(chatId), parsedStateUpdate.rawBlock);
+    if (!assistantMessage) {
+      return;
     }
-    spindle.toast?.error?.("LumiWorld skipped this turn because the hidden state update was invalid.");
-    spindle.log.warn(`LumiWorld: invalid or missing STATE_UPDATE: ${parsedStateUpdate.error ?? "unknown error"}`);
-    return;
-  }
 
-  const next = applyStateUpdateToWorld(graph, parsedStateUpdate.parsed, ledger);
-  await saveWorldGraph(next);
-  await writeDigest(chatId, next);
-  sendWorldUpdate(chatId, summarizeWorld(next));
+    const parsedStateUpdate = parseStateUpdateEnvelope(assistantMessage.content);
+    const strippedContent = stripStateUpdateBlock(assistantMessage.content);
+    const ledger = parseCompactLedger(strippedContent);
+
+    if (strippedContent !== assistantMessage.content) {
+      await spindle.chat.updateMessage(chatId, assistantMessage.id, {
+        content: strippedContent,
+        skipChunkRebuild: true,
+      });
+    }
+
+    if (!parsedStateUpdate.found || !parsedStateUpdate.parsed) {
+      if (parsedStateUpdate.rawBlock) {
+        await spindle.storage.write(DEBUG_PATH(chatId), parsedStateUpdate.rawBlock);
+      }
+      spindle.toast?.error?.("LumiWorld skipped this turn because the hidden state update was invalid.");
+      spindle.log.warn(`LumiWorld: invalid or missing STATE_UPDATE: ${parsedStateUpdate.error ?? "unknown error"}`);
+      return;
+    }
+
+    const next = applyStateUpdateToWorld(graph, parsedStateUpdate.parsed, ledger);
+    await saveWorldGraph(next);
+    await writeDigest(chatId, next);
+    sendWorldUpdate(chatId, summarizeWorld(next));
+  } catch (error) {
+    spindle.toast?.error?.("LumiWorld hit an unexpected error updating the world this turn.");
+    spindle.log.error(`LumiWorld: post-turn commit failed for chat ${chatId}: ${formatError(error)}`);
+  }
 }
 
 async function ensureWorldGraph(chatId: string, userId?: string): Promise<WorldGraph | null> {
