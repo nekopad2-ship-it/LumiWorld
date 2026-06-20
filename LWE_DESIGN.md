@@ -3,6 +3,8 @@
 
 > **Source of truth for data model**: MLRPE v1.6.9 blocks 9 (Social), 10 (Moral), 11 (Secrets), 13 (Story), 39 (Cast State Ledger), 55 (task_rail).
 
+> ⚠️ **STALE API NOTICE**: This design doc was written before the Lumiverse Spindle API was verified. Several API signatures in earlier sections have been corrected in the code but not yet fully propagated through this doc. **Where this doc and the code disagree, the code is the source of truth.** Known-corrected call sites below are marked inline. See `.hermes/plans/2026-06-20_112951-lumiworld-roadmap-and-stabilization.md` for the full list of corrections.
+
 ---
 
 ## 1. What LWE Is (and Isn't)
@@ -20,18 +22,22 @@ The model does the psychology. LWE keeps score.
 ## 2. Architecture
 
 ### Runtime and Permissions
+
+> ⚠️ Corrected to match the real `spindle.json`. `runtimeMode` is **not** a manifest field — it is host-side config, not declared here.
+
 ```json
 {
-  "identifier": "lwe.living-world",
-  "name": "Living World Engine",
+  "identifier": "lumiworld",
+  "name": "LumiWorld",
   "version": "0.1.0",
-  "runtimeMode": "process",
-  "permissions": ["generation", "characters", "chat_mutation", "world_books"],
-  "backend": "dist/backend.js",
-  "frontend": "dist/frontend.js"
+  "author": "junbr",
+  "permissions": ["generation", "characters", "chats", "chat_mutation", "ui_panels"],
+  "entry_backend": "dist/backend.js",
+  "entry_frontend": "dist/frontend.js",
+  "minimum_lumiverse_version": "0.2.0"
 }
 ```
-Storage is free tier (no permission needed). Note: `world_books` permission — verify against Spindle manifest docs; add if required.
+Storage is free tier (no permission needed). The `world_books` permission is **not** required and is not declared. The active permissions are: `generation` (World Processor sidecar raw gen + `connections.list`), `characters`, `chats`, `chat_mutation` (message content strip), and `ui_panels` (Tracker / float widget).
 
 ### Bridge Contract
 
@@ -75,7 +81,7 @@ GENERATION
   6. Model writes prose + Cast State Ledger + [STATE_UPDATE] at end
 
 POST-TURN (GENERATION_ENDED)
-  7. Check generationType — skip commit on swipe/regen (see §Guard)
+  7. Skip commit on swipe/regen via MESSAGE_SWIPED / MESSAGE_EDITED lockout (see §Guard)
   8. Call spindle.chat.getMessages(chatId); take last assistant message
   9. Extract [STATE_UPDATE] from content (regex, anywhere-in-content)
   10. Extract Cast State Ledger from content (regex <details>...</details>)
@@ -94,17 +100,21 @@ POST-TURN (GENERATION_ENDED)
 
 ### Swipe / Regen Guard
 
-`GENERATION_ENDED` fires for all generation types. To detect swipe/regen:
+`GENERATION_ENDED` fires for all generation types, including swipes and edits. There is **no** `generationType` field on `GenerationEndedPayloadDTO` — do not attempt to gate on it.
 
-- **Option A (preferred):** Check `GenerationEndedPayloadDTO.generationType` if it exists in the payload. Proceed only on `'normal'`.
-- **Option B (fallback):** Subscribe to `GENERATION_STARTED` and stash `generationType` in `spindle.ephemeral`. Read it in `GENERATION_ENDED`.
+- **Primary approach:** Subscribe to `MESSAGE_SWIPED` and `MESSAGE_EDITED` events. When either fires, add the affected message id(s) to a commit-lockout set. On the subsequent `GENERATION_ENDED`, if the produced message id is in the lockout set (or belongs to a swipe/edit lineage), **skip the commit step** — WorldGraph stays at pre-turn state. Clear the lockout entry once the next genuine new message is committed.
+- **Secondary fallback only:** A `generationSessions` heuristic — comparing session ids across consecutive `GENERATION_ENDED` firings to detect re-runs of the same position. Less reliable than the event subscription; use only if the host does not emit `MESSAGE_SWIPED` / `MESSAGE_EDITED`.
 
-Verify which option is available by inspecting the actual payload shape on first build.
+Net effect is identical to the old (incorrect) `generationType === 'normal'` check: swipes and regens never commit; only freshly generated assistant messages update the WorldGraph.
 
 ### Cold Start
 
 On `CHAT_SWITCHED` (or first `CHARACTER_MESSAGE_RENDERED` with no existing WorldGraph):
-1. Read character card via `spindle.characters.get(chatId)`
+1. Fetch the chat, then the character card. This is a **two-step** lookup — `spindle.characters.get()` takes a `characterId`, **not** a `chatId`:
+   ```typescript
+   const chat  = await spindle.chats.get(chatId);
+   const char  = await spindle.characters.get(chat.character_id);
+   ```
 2. Create stub NPCNode for `{{char}}` and any group members as Majors
 3. Create empty WorldGraph, write to `spindle.storage`
 4. Set initial `{{@lwe_world_state}}`: `"WorldGraph initialised. No prior session state. Emit [STATE_UPDATE] with sceneCast and any NPCs introduced this turn."`
@@ -587,6 +597,8 @@ type PlayerNode = {
 
 ### SceneCast
 
+> ⚠️ **NOTE:** `beatFocal` and `beatDriver` are **not native MLRPE fields**. They are invented names with zero preset grounding. MLRPE's native vocabulary here is `focus` / `pressure` / `ensemble`. Either Block B must explicitly map `beatFocal`/`beatDriver` onto MLRPE's `focus`/`pressure` vocabulary, or these fields should be dropped entirely. **This is unresolved — see P1-2 in the implementation plan.**
+
 ```typescript
 type SceneCast = {
   active: string[]
@@ -643,6 +655,8 @@ type LWESettings = {
 
 Exposed in Tracker UI settings panel. Default: `null` for both. Document performance implication: null means every tick costs a call on the main connection.
 
+> ⚠️ **Corrected connection API.** The secondary-connection picker is populated via `spindle.connections.list(userId?)` — note the **plural** `connections` namespace. It requires the `'generation'` permission (already declared in the manifest). There is **no** `spindle.threads` and no singular `spindle.connection` namespace; do not use either. `sidecarConnectionId` stores the `id` returned by `connections.list()`.
+
 ---
 
 ### Schema Migration
@@ -666,6 +680,8 @@ On every `spindle.storage.read()` of a WorldGraph:
 Emitted by the model at turn end, per the post-history contract block.
 
 **Important:** For NPCs currently in `sceneCast.active`, `moodNow` and `locationNow` are optional — the Cast State Ledger captures these as player-visible data and LWE reads them from there. For offscreen NPCs, they are required. `emotionalStateNow` is always required for Major NPCs (it is hidden psychology, not in the Ledger).
+
+> ⚠️ **NOTE:** the `beatFocal` / `beatDriver` keys shown in the `sceneCast` object below are **not native MLRPE fields**. They are invented names with zero preset grounding. Native MLRPE vocabulary is `focus` / `pressure` / `ensemble`. Either Block B must explicitly map them, or they should be dropped. **Unresolved — see P1-2 in the implementation plan.** (Same caveat applies to the `SceneCast` type in §4.)
 
 ```
 [STATE_UPDATE]
@@ -801,7 +817,7 @@ Swipe / Regen: DO NOT commit. WorldGraph stays at pre-turn state.
 
 ## 8. UI
 
-### Floating Mini-Widget (`ctx.placement.addFloatingWidget`)
+### Floating Mini-Widget (`ctx.ui.createFloatWidget`)
 
 Minimal. Collapsible. Visible at chat edge. Only shown when active WorldGraph exists for the current chat.
 
@@ -811,6 +827,8 @@ Contents:
 - Click → opens full Tracker drawer
 
 Updated after each turn via `spindle.sendToFrontend({ type: 'WORLD_UPDATED', chatId })` push.
+
+> ⚠️ **Corrected.** The Spindle frontend API is `ctx.ui.createFloatWidget` — there is no `ctx.placement.addFloatingWidget`. Additionally, the sandbox iframe does **not** expose `localStorage` / `sessionStorage`, and the current widget renders directly into the host DOM rather than into an isolated iframe (so it shares the host's storage surface, not a sandboxed one). Keep all state on the backend; the widget is presentational only.
 
 ### Tracker Drawer (main panel)
 
