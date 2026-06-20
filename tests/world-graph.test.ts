@@ -354,4 +354,58 @@ describe("world graph updates", () => {
     expect(digest).toContain("player:");
     expect(approximateTokens).toBeLessThanOrEqual(200);
   });
+
+  test("secrets and hooks merge across turns instead of being replaced", () => {
+    let graph = seedWorldGraph({
+      chatId: "chat-1",
+      characterId: "char-1",
+      characterName: "Mira",
+    });
+
+    // Turn 1: two secrets, one hook
+    graph = applyStateUpdateToWorld(
+      graph,
+      {
+        sceneCast: { active: ["mira"], nearby: [], offscreen: [] },
+        npcDeltas: [],
+        edgeDeltas: [],
+        secretDeltas: [
+          { secret: "mira_is_traitor", lifecycle: "dormant", suspects: [], newEvidence: [] },
+          { secret: "mira_debt", lifecycle: "dormant", suspects: [], newEvidence: [] },
+        ],
+        hookDeltas: [{ arc: "mira_identity", fact: "inscribed dagger", lifecycle: "planted" }],
+        playerDeltas: {},
+        newEntities: [],
+      },
+      null,
+    );
+
+    // Turn 2: only ONE secret re-emitted (the other omitted), hook omitted entirely
+    graph = applyStateUpdateToWorld(
+      graph,
+      {
+        sceneCast: { active: ["mira"], nearby: [], offscreen: [] },
+        npcDeltas: [],
+        edgeDeltas: [],
+        secretDeltas: [
+          { secret: "mira_is_traitor", lifecycle: "suspected", suspects: ["player"], newEvidence: ["overheard"] },
+        ],
+        hookDeltas: [],
+        playerDeltas: {},
+        newEntities: [],
+      },
+      null,
+    );
+
+    // Both secrets must survive; the re-emitted one must be updated.
+    const byKey = Object.fromEntries(graph.secrets.map((s) => [s.secret, s]));
+    expect(byKey["mira_is_traitor"]?.lifecycle).toBe("suspected");
+    expect(byKey["mira_is_traitor"]?.suspects).toContain("player");
+    expect(byKey["mira_is_traitor"]?.evidence).toContain("overheard");
+    // The omitted secret is PRESERVED, not deleted.
+    expect(byKey["mira_debt"]).toBeDefined();
+    expect(byKey["mira_debt"]?.lifecycle).toBe("dormant");
+    // The omitted hook is PRESERVED.
+    expect(graph.hooks.find((h) => h.arc === "mira_identity" && h.fact === "inscribed dagger")).toBeDefined();
+  });
 });

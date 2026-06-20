@@ -144,18 +144,40 @@ export function applyStateUpdateToWorld(
     }
   }
 
-  next.secrets = stateUpdate.secretDeltas.map((secret) => ({
-    secret: secret.secret,
-    lifecycle: secret.lifecycle,
-    suspects: secret.suspects ?? [],
-    evidence: secret.newEvidence ?? [],
-  }));
+  // Secrets merge by `secret` key: update lifecycle and accumulate suspects/evidence
+  // for existing entries, append new ones, and PRESERVE any secret the model omitted
+  // this turn. (Design intent: durable accumulation, not per-turn replacement.)
+  const secretByKey = new Map(next.secrets.map((s) => [s.secret, s]));
+  for (const delta of stateUpdate.secretDeltas) {
+    const existing = secretByKey.get(delta.secret);
+    if (existing) {
+      existing.lifecycle = delta.lifecycle;
+      existing.suspects = Array.from(new Set([...existing.suspects, ...(delta.suspects ?? [])]));
+      existing.evidence = Array.from(new Set([...existing.evidence, ...(delta.newEvidence ?? [])]));
+    } else {
+      secretByKey.set(delta.secret, {
+        secret: delta.secret,
+        lifecycle: delta.lifecycle,
+        suspects: delta.suspects ?? [],
+        evidence: delta.newEvidence ?? [],
+      });
+    }
+  }
+  next.secrets = [...secretByKey.values()];
 
-  next.hooks = stateUpdate.hookDeltas.map((hook) => ({
-    arc: hook.arc,
-    fact: hook.fact,
-    lifecycle: hook.lifecycle,
-  }));
+  // Hooks merge by `arc|fact` composite key: update lifecycle for existing hooks,
+  // append new ones, and PRESERVE any hook the model omitted this turn.
+  const hookByKey = new Map(next.hooks.map((h) => [`${h.arc}|${h.fact}`, h]));
+  for (const delta of stateUpdate.hookDeltas) {
+    const key = `${delta.arc}|${delta.fact}`;
+    const existing = hookByKey.get(key);
+    if (existing) {
+      existing.lifecycle = delta.lifecycle;
+    } else {
+      hookByKey.set(key, { arc: delta.arc, fact: delta.fact, lifecycle: delta.lifecycle });
+    }
+  }
+  next.hooks = [...hookByKey.values()];
 
   if (stateUpdate.playerDeltas.attire) {
     next.player.attire = stateUpdate.playerDeltas.attire;
