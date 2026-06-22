@@ -1,13 +1,21 @@
 {
   "version": "0.1.0",
-  "name": "LumiWorld",
-  "identifier": "lumiworld",
+  "name": "Living World Engine",
+  "identifier": "lwe_living_world",
   "author": "junbr",
-  "github": "https://github.com/nekopad2-ship-it/LumiWorld",
-  "homepage": "https://github.com/nekopad2-ship-it/LumiWorld",
-  "description": "A Lumiverse extension for persistent living-world tracking in RP chats.",
-  "permissions": ["generation", "characters", "chats", "chat_mutation", "ui_panels"],
+  "github": "https://github.com/nekopad2-ship-it/Lumiverse-Extensions-WLE",
+  "homepage": "https://github.com/nekopad2-ship-it/Lumiverse-Extensions-WLE",
+  "description": "Persistent NPC agency, world continuity, and scene-impact foundations for Lumiverse.",
+  "permissions": [
+    "generation",
+    "interceptor",
+    "characters",
+    "chats",
+    "chat_mutation",
+    "ui_panels"
+  ],
   "entry_backend": "dist/backend.js",
   "entry_frontend": "dist/frontend.js",
-  "minimum_lumiverse_version": "0.2.0"
+  "minimum_lumiverse_version": "0.2.0",
+  "interceptorTimeoutMs": 12000
 }

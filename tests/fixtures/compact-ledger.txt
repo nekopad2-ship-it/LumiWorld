@@ -1,8 +1,0 @@
-<details><summary>🗃️ Cast State</summary>
-**Focus:** Mira — east_market; guarded; grey cloak; knuckles bruised; watching the player closely.
-**Cast:** Draven — east arch; winded; hand on sword belt.
-**Cast:** Innkeeper Bo — tavern steps; unhurt; shouting for the guard.
-**Bonds/social:** Mira -> Player — kept distance after accepting help.
-**Known pressure:** the sealed letter is still missing.
-**<user>:** hood up; shallow cut on left forearm; standing by the fountain.
-</details>

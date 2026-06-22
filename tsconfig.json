@@ -1,13 +1,17 @@
 {
   "compilerOptions": {
-    "target": "ESNext",
+    "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
     "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "useUnknownInCatchVariables": true,
+    "skipLibCheck": true,
     "outDir": "./dist",
     "declaration": false,
-    "skipLibCheck": true,
-    "lib": ["ESNext", "DOM"]
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node"]
   },
-  "include": ["src", "tests"]
+  "include": ["src", "tests", "eslint.config.js"]
 }
