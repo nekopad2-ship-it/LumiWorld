@@ -12,7 +12,8 @@
     "characters",
     "chats",
     "chat_mutation",
-    "ui_panels"
+    "ui_panels",
+    "app_manipulation"
   ],
   "entry_backend": "dist/backend.js",
   "entry_frontend": "dist/frontend.js",

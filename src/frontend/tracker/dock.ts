@@ -1,10 +1,7 @@
-type DockHandle = {
+type TrackerOverlayHandle = {
   root: HTMLElement;
-  collapse(): void;
-  expand(): void;
+  setVisible(visible: boolean): void;
   destroy(): void;
-  isCollapsed?(): boolean;
-  onVisibilityChange?(handler: (visible: boolean) => void): () => void;
 };
 
 const TRACKER_TABS = [
@@ -19,8 +16,9 @@ const TRACKER_TABS = [
 
 type TrackerTabId = (typeof TRACKER_TABS)[number]["id"];
 
-export function renderDock(dock: DockHandle): void {
+export function renderDock(dock: TrackerOverlayHandle): void {
   let activeTab: TrackerTabId = "overview";
+  dock.root.classList.add("lwe-tracker-overlay-root");
 
   const descriptions: Record<TrackerTabId, string> = {
     overview: "Overview surface is empty in Phase 1.",
@@ -80,7 +78,7 @@ export function renderDock(dock: DockHandle): void {
     dock.root
       .querySelector<HTMLButtonElement>('button[data-dock-action="close"]')
       ?.addEventListener("click", () => {
-        dock.collapse();
+        dock.setVisible(false);
       });
 
     for (const button of dock.root.querySelectorAll<HTMLButtonElement>(
@@ -100,7 +98,7 @@ export function renderDock(dock: DockHandle): void {
   update();
 }
 
-function focusDock(dock: DockHandle): void {
+function focusDock(dock: TrackerOverlayHandle): void {
   dock.root
     .querySelector<HTMLElement>('button[data-dock-tab][aria-pressed="true"]')
     ?.focus();
@@ -111,54 +109,36 @@ function focusDock(dock: DockHandle): void {
   }
 }
 
-export function createDockController(dock: DockHandle): {
+export function createDockController(dock: TrackerOverlayHandle): {
   close(): void;
   open(): void;
   toggle(): void;
   destroy(): void;
 } {
-  let awaitingVisibleFocus = false;
-  let collapsed = dock.isCollapsed?.() ?? true;
-  const unsubscribe = dock.onVisibilityChange?.((visible) => {
-    collapsed = !visible;
-    if (!visible || !awaitingVisibleFocus) {
-      return;
-    }
-    awaitingVisibleFocus = false;
-    focusDock(dock);
-  });
+  let visible = false;
+  dock.setVisible(false);
 
   return {
     close() {
-      awaitingVisibleFocus = false;
-      dock.collapse();
-      collapsed = true;
+      dock.setVisible(false);
+      visible = false;
     },
     open() {
-      const wasCollapsed = dock.isCollapsed?.() ?? collapsed;
-      dock.expand();
-      collapsed = false;
-      if (wasCollapsed) {
-        awaitingVisibleFocus = true;
-        queueMicrotask(() => {
-          if (dock.isCollapsed?.() === false) {
-            awaitingVisibleFocus = false;
-            focusDock(dock);
-          }
-        });
-        return;
-      }
-      focusDock(dock);
+      dock.setVisible(true);
+      visible = true;
+      queueMicrotask(() => {
+        focusDock(dock);
+      });
     },
     toggle() {
-      if (dock.isCollapsed?.() ?? collapsed) {
+      if (!visible) {
         this.open();
         return;
       }
       this.close();
     },
     destroy() {
-      unsubscribe?.();
+      visible = false;
     },
   };
 }

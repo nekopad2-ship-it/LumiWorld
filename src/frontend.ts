@@ -11,14 +11,9 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   const viewModel = createFrontendViewModel();
   const activeChat = ctx.getActiveChat();
 
-  const dock = ctx.ui.requestDockPanel({
-    edge: "right",
-    title: "Living World Engine",
-    size: 320,
-    minSize: 260,
-    maxSize: 480,
-    resizable: true,
-    startCollapsed: true,
+  const dock = ctx.ui.mountApp({
+    className: "lwe-tracker-overlay-host",
+    position: "app-overlay",
   });
   const drawer = ctx.ui.registerDrawerTab({
     id: "lwe_settings",
@@ -157,14 +152,35 @@ const styles = `
   }
 
   .lwe-tracker-shell {
-    min-height: 100%;
+    min-height: min(78vh, 720px);
+    max-height: min(78vh, 720px);
     background:
       linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0)),
       var(--lumiverse-fill-subtle);
+    box-shadow: -24px 0 50px rgba(0, 0, 0, 0.26);
+    overflow: hidden;
   }
 
   .lwe-close-button {
     background: transparent;
+  }
+
+  .lwe-tracker-overlay-root {
+    position: fixed;
+    top: max(16px, env(safe-area-inset-top));
+    right: max(12px, env(safe-area-inset-right));
+    bottom: max(16px, env(safe-area-inset-bottom));
+    width: min(420px, calc(100vw - 24px));
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    pointer-events: none;
+    z-index: 40;
+  }
+
+  .lwe-tracker-overlay-root .lwe-tracker-shell {
+    width: 100%;
+    pointer-events: auto;
   }
 
   .lwe-tracker-frame {
@@ -223,6 +239,21 @@ const styles = `
   }
 
   @media (max-width: 720px) {
+    .lwe-tracker-overlay-root {
+      top: auto;
+      left: auto;
+      right: max(8px, env(safe-area-inset-right));
+      bottom: max(8px, env(safe-area-inset-bottom));
+      width: min(420px, calc(100vw - 12px));
+      max-width: calc(100vw - 12px);
+      align-items: flex-end;
+    }
+
+    .lwe-tracker-overlay-root .lwe-tracker-shell {
+      min-height: min(82vh, 760px);
+      max-height: min(82vh, 760px);
+    }
+
     .lwe-tracker-frame {
       grid-template-columns: 1fr;
     }

@@ -4,7 +4,7 @@ import { JSDOM } from "jsdom";
 
 import { setup } from "../../src/frontend.js";
 
-test("frontend registers one drawer, one dock, one orb, and reuses the dock on activation", async () => {
+test("frontend registers one drawer, one tracker overlay, one orb, and toggles the tracker overlay on activation", async () => {
   const dom = new JSDOM("<!doctype html><html><body></body></html>");
   const { window } = dom;
   Object.assign(globalThis, {
@@ -13,14 +13,15 @@ test("frontend registers one drawer, one dock, one orb, and reuses the dock on a
     HTMLElement: window.HTMLElement,
   });
 
-  const expandCalls: string[] = [];
-  const collapseCalls: string[] = [];
+  const visibilityCalls: boolean[] = [];
   const backendMessages: unknown[] = [];
-  const dockRoot = window.document.createElement("div");
+  const trackerRoot = window.document.createElement("div");
   const drawerRoot = window.document.createElement("div");
   const orbRoot = window.document.createElement("div");
-  window.document.body.append(dockRoot, drawerRoot, orbRoot);
-  let collapsed = true;
+  window.document.body.append(trackerRoot, drawerRoot, orbRoot);
+  let overlayVisible = false;
+  let dockPanelCalls = 0;
+  let appMountCalls = 0;
 
   let backendHandler: ((payload: unknown) => void) | undefined;
 
@@ -41,20 +42,28 @@ test("frontend registers one drawer, one dock, one orb, and reuses the dock on a
       characterId: "char-1",
     }),
     ui: {
-      requestDockPanel: () => ({
-        root: dockRoot,
-        expand: () => {
-          collapsed = false;
-          expandCalls.push("expand");
-        },
-        collapse: () => {
-          collapsed = true;
-          collapseCalls.push("collapse");
-        },
-        isCollapsed: () => collapsed,
-        destroy: () => undefined,
-        onVisibilityChange: () => () => undefined,
-      }),
+      requestDockPanel: () => {
+        dockPanelCalls += 1;
+        return {
+          root: window.document.createElement("div"),
+          expand: () => undefined,
+          collapse: () => undefined,
+          isCollapsed: () => true,
+          destroy: () => undefined,
+          onVisibilityChange: () => () => undefined,
+        };
+      },
+      mountApp: () => {
+        appMountCalls += 1;
+        return {
+          root: trackerRoot,
+          setVisible: (visible: boolean) => {
+            overlayVisible = visible;
+            visibilityCalls.push(visible);
+          },
+          destroy: () => undefined,
+        };
+      },
       registerDrawerTab: () => ({
         root: drawerRoot,
         activate: () => undefined,
@@ -74,8 +83,10 @@ test("frontend registers one drawer, one dock, one orb, and reuses the dock on a
     type: "REQUEST_BOOTSTRAP",
     chatId: "chat-1",
   });
+  assert.equal(dockPanelCalls, 0);
+  assert.equal(appMountCalls, 1);
   assert.equal(
-    dockRoot.querySelectorAll<HTMLButtonElement>("button[data-dock-tab]")
+    trackerRoot.querySelectorAll<HTMLButtonElement>("button[data-dock-tab]")
       .length,
     7,
   );
@@ -85,22 +96,23 @@ test("frontend registers one drawer, one dock, one orb, and reuses the dock on a
     7,
   );
   assert.ok(
-    dockRoot.querySelector<HTMLButtonElement>(
+    trackerRoot.querySelector<HTMLButtonElement>(
       'button[data-dock-action="close"]',
     ),
   );
+  assert.equal(overlayVisible, false);
 
-  dockRoot
+  trackerRoot
     .querySelector<HTMLButtonElement>('button[data-dock-tab="people"]')
     ?.click();
   assert.equal(
-    dockRoot
+    trackerRoot
       .querySelector<HTMLButtonElement>('button[data-dock-tab="people"]')
       ?.getAttribute("aria-pressed"),
     "true",
   );
   assert.match(
-    dockRoot.textContent ?? "",
+    trackerRoot.textContent ?? "",
     /People surface is empty in Phase 1/i,
   );
 
@@ -126,27 +138,26 @@ test("frontend registers one drawer, one dock, one orb, and reuses the dock on a
     window.document.activeElement?.getAttribute("data-dock-tab"),
     "people",
   );
-  assert.equal(expandCalls.length, 1);
-  assert.equal(collapsed, false);
+  assert.equal(overlayVisible, true);
+  assert.deepEqual(visibilityCalls, [false, true]);
 
   orbRoot.querySelector<HTMLButtonElement>("button")?.click();
   await Promise.resolve();
-  assert.equal(collapseCalls.length, 1);
-  assert.equal(collapsed, true);
+  assert.equal(overlayVisible, false);
 
-  dockRoot
+  trackerRoot
     .querySelector<HTMLButtonElement>('button[data-dock-action="close"]')
     ?.click();
   await Promise.resolve();
-  assert.equal(collapseCalls.length, 2);
-  assert.equal(collapsed, true);
+  assert.equal(overlayVisible, false);
 
   backendHandler?.({ type: "OPEN_TRACKER" });
   await Promise.resolve();
 
-  assert.equal(expandCalls.length, 2);
+  assert.equal(overlayVisible, true);
+  assert.deepEqual(visibilityCalls, [false, true, false, false, true]);
   assert.match(drawerRoot.textContent ?? "", /General|Living World Engine/i);
-  assert.match(dockRoot.textContent ?? "", /Overview|People|Agency/i);
+  assert.match(trackerRoot.textContent ?? "", /Overview|People|Agency/i);
 
   cleanup();
   dom.window.close();
