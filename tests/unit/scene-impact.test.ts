@@ -24,5 +24,6 @@ test("static scene impact stays preset-neutral and empty in phase 1", () => {
 
   const message = buildSceneImpactSystemMessage(impact);
   assert.equal(message.role, "system");
+  assert.equal(message.name, "LWE Scene Impact");
   assert.match(message.content, /LWE_SCENE_IMPACT:/);
 });

@@ -9,14 +9,13 @@ const typedConfigs = tseslint.configs.recommendedTypeChecked.map((config) => ({
     parserOptions: {
       ...config.languageOptions?.parserOptions,
       project: "./tsconfig.json",
-      tsconfigRootDir: import.meta.dirname,
     },
   },
 }));
 
 export default [
   {
-    ignores: ["dist/**", "node_modules/**", "release/**", "eslint.config.js"],
+    ignores: ["dist/**", "node_modules/**", "eslint.config.js"],
   },
   js.configs.recommended,
   ...typedConfigs,
@@ -32,14 +31,6 @@ export default [
     rules: {
       "@typescript-eslint/no-floating-promises": "off",
       "@typescript-eslint/require-await": "off",
-    },
-  },
-  {
-    files: ["scripts/**/*.mjs"],
-    languageOptions: {
-      globals: {
-        process: "readonly",
-      },
     },
   },
 ];

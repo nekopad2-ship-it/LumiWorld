@@ -1,6 +1,9 @@
 import { resolve } from "node:path";
 
-import { createPackageManifest, packageExtension } from "./package-extension-lib.mjs";
+import {
+  createPackageManifest,
+  packageExtension,
+} from "./package-extension-lib.mjs";
 
 const sourceDir = process.cwd();
 const outputDir = resolve(sourceDir, "release", "extensions");

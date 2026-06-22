@@ -136,7 +136,6 @@ export type SceneImpact = {
 
 export type SceneImpactSystemMessage = {
   role: "system";
-  name: string;
   content: string;
 };
 

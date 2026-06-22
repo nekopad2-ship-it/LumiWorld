@@ -1,4 +1,11 @@
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  rmSync,
+  statSync,
+} from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 
 const EXCLUDED_NAMES = new Set([
@@ -57,7 +64,10 @@ export function packageExtension(manifest) {
     if (shouldExcludePath(entry)) {
       continue;
     }
-    copyRecursive(join(manifest.sourceDir, entry), join(repoDir, basename(entry)));
+    copyRecursive(
+      join(manifest.sourceDir, entry),
+      join(repoDir, basename(entry)),
+    );
   }
 
   return {

@@ -14,9 +14,12 @@ test("frontend registers one drawer, one dock, one orb, and reuses the dock on a
   });
 
   const expandCalls: string[] = [];
+  const backendMessages: unknown[] = [];
   const dockRoot = window.document.createElement("div");
   const drawerRoot = window.document.createElement("div");
   const orbRoot = window.document.createElement("div");
+  window.document.body.append(dockRoot, drawerRoot, orbRoot);
+  let collapsed = true;
 
   let backendHandler: ((payload: unknown) => void) | undefined;
 
@@ -29,13 +32,23 @@ test("frontend registers one drawer, one dock, one orb, and reuses the dock on a
       backendHandler = handler;
       return () => undefined;
     },
-    sendToBackend: () => undefined,
+    sendToBackend: (payload: unknown) => {
+      backendMessages.push(payload);
+    },
+    getActiveChat: () => ({
+      chatId: "chat-1",
+      characterId: "char-1",
+    }),
     ui: {
       requestDockPanel: () => ({
         root: dockRoot,
         expand: () => {
+          collapsed = false;
           expandCalls.push("expand");
         },
+        isCollapsed: () => collapsed,
+        destroy: () => undefined,
+        onVisibilityChange: () => () => undefined,
       }),
       registerDrawerTab: () => ({
         root: drawerRoot,
@@ -52,10 +65,44 @@ test("frontend registers one drawer, one dock, one orb, and reuses the dock on a
 
   const cleanup = setup(ctx as never);
 
-  backendHandler?.({ type: "OPEN_TRACKER" });
-  backendHandler?.({ type: "OPEN_TRACKER" });
+  assert.deepEqual(backendMessages[0], {
+    type: "REQUEST_BOOTSTRAP",
+    chatId: "chat-1",
+  });
+  assert.equal(
+    dockRoot.querySelectorAll<HTMLButtonElement>("button[data-dock-tab]")
+      .length,
+    7,
+  );
 
-  assert.equal(expandCalls.length, 2);
+  dockRoot
+    .querySelector<HTMLButtonElement>('button[data-dock-tab="people"]')
+    ?.click();
+  assert.equal(
+    dockRoot
+      .querySelector<HTMLButtonElement>('button[data-dock-tab="people"]')
+      ?.getAttribute("aria-pressed"),
+    "true",
+  );
+  assert.match(
+    dockRoot.textContent ?? "",
+    /People surface is empty in Phase 1/i,
+  );
+
+  orbRoot.querySelector<HTMLButtonElement>("button")?.click();
+  await Promise.resolve();
+
+  assert.deepEqual(backendMessages[1], { type: "OPEN_TRACKER" });
+  assert.equal(
+    window.document.activeElement?.getAttribute("data-dock-tab"),
+    "people",
+  );
+
+  backendHandler?.({ type: "OPEN_TRACKER" });
+  backendHandler?.({ type: "OPEN_TRACKER" });
+  await Promise.resolve();
+
+  assert.equal(expandCalls.length, 3);
   assert.match(drawerRoot.textContent ?? "", /General|Living World Engine/i);
   assert.match(dockRoot.textContent ?? "", /Overview|People|Agency/i);
 

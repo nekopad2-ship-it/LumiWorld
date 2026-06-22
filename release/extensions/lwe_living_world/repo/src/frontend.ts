@@ -9,7 +9,6 @@ import { createFrontendViewModel } from "./frontend/state/view-model.js";
 export function setup(ctx: SpindleFrontendContext): () => void {
   const removeStyle = ctx.dom.addStyle(styles);
   const viewModel = createFrontendViewModel();
-  const activeChat = ctx.getActiveChat();
 
   const dock = ctx.ui.requestDockPanel({
     edge: "right",
@@ -38,12 +37,12 @@ export function setup(ctx: SpindleFrontendContext): () => void {
   renderDrawer(drawer);
   renderDock(dock);
 
-  const dockOpener = createDockOpener(dock);
+  const openDock = createDockOpener(dock);
   renderOrb({
     orb,
     settings: viewModel.settings,
     onOpen: () => {
-      dockOpener.open();
+      openDock();
       ctx.sendToBackend({ type: "OPEN_TRACKER" });
     },
   });
@@ -53,7 +52,7 @@ export function setup(ctx: SpindleFrontendContext): () => void {
       return;
     }
     if (payload.type === "OPEN_TRACKER") {
-      dockOpener.open();
+      openDock();
       return;
     }
     if (payload.type === "BOOTSTRAP_STATE") {
@@ -62,16 +61,11 @@ export function setup(ctx: SpindleFrontendContext): () => void {
     }
   });
 
-  ctx.sendToBackend({
-    type: "REQUEST_BOOTSTRAP",
-    chatId: activeChat.chatId,
-  });
+  ctx.sendToBackend({ type: "REQUEST_BOOTSTRAP", chatId: null });
 
   return () => {
     unsubscribe();
     orb.destroy();
-    dockOpener.destroy();
-    dock.destroy();
     drawer.destroy();
     removeStyle();
     ctx.dom.cleanup();
@@ -101,22 +95,13 @@ const styles = `
     gap: 8px;
   }
 
-  .lwe-chip-row button,
+  .lwe-chip-row span,
   .lwe-orb {
     border-radius: 999px;
     border: 1px solid var(--lumiverse-border);
     background: var(--lumiverse-fill);
     color: var(--lumiverse-text);
     padding: 6px 10px;
-  }
-
-  .lwe-chip-row button {
-    cursor: pointer;
-  }
-
-  .lwe-chip-row button[aria-pressed="true"] {
-    background: var(--lumiverse-fill-emphasis);
-    border-color: var(--lumiverse-border-strong, var(--lumiverse-border));
   }
 
   .lwe-orb {

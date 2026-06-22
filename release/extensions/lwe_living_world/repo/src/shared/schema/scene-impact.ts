@@ -33,7 +33,6 @@ export function toSceneImpactSystemMessage(
 
   return {
     role: "system",
-    name: "LWE Scene Impact",
     content: lines.join("\n"),
   };
 }
