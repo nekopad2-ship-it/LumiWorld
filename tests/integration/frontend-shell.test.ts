@@ -14,6 +14,7 @@ test("frontend registers one drawer, one dock, one orb, and reuses the dock on a
   });
 
   const expandCalls: string[] = [];
+  const collapseCalls: string[] = [];
   const backendMessages: unknown[] = [];
   const dockRoot = window.document.createElement("div");
   const drawerRoot = window.document.createElement("div");
@@ -46,6 +47,10 @@ test("frontend registers one drawer, one dock, one orb, and reuses the dock on a
           collapsed = false;
           expandCalls.push("expand");
         },
+        collapse: () => {
+          collapsed = true;
+          collapseCalls.push("collapse");
+        },
         isCollapsed: () => collapsed,
         destroy: () => undefined,
         onVisibilityChange: () => () => undefined,
@@ -74,6 +79,16 @@ test("frontend registers one drawer, one dock, one orb, and reuses the dock on a
       .length,
     7,
   );
+  assert.equal(
+    drawerRoot.querySelectorAll<HTMLButtonElement>("button[data-drawer-tab]")
+      .length,
+    7,
+  );
+  assert.ok(
+    dockRoot.querySelector<HTMLButtonElement>(
+      'button[data-dock-action="close"]',
+    ),
+  );
 
   dockRoot
     .querySelector<HTMLButtonElement>('button[data-dock-tab="people"]')
@@ -89,20 +104,47 @@ test("frontend registers one drawer, one dock, one orb, and reuses the dock on a
     /People surface is empty in Phase 1/i,
   );
 
+  drawerRoot
+    .querySelector<HTMLButtonElement>('button[data-drawer-tab="debug"]')
+    ?.click();
+  assert.equal(
+    drawerRoot
+      .querySelector<HTMLButtonElement>('button[data-drawer-tab="debug"]')
+      ?.getAttribute("aria-pressed"),
+    "true",
+  );
+  assert.match(
+    drawerRoot.textContent ?? "",
+    /Debug controls are not wired in Phase 1/i,
+  );
+
   orbRoot.querySelector<HTMLButtonElement>("button")?.click();
   await Promise.resolve();
 
-  assert.deepEqual(backendMessages[1], { type: "OPEN_TRACKER" });
+  assert.equal(backendMessages.length, 1);
   assert.equal(
     window.document.activeElement?.getAttribute("data-dock-tab"),
     "people",
   );
+  assert.equal(expandCalls.length, 1);
+  assert.equal(collapsed, false);
 
-  backendHandler?.({ type: "OPEN_TRACKER" });
+  orbRoot.querySelector<HTMLButtonElement>("button")?.click();
+  await Promise.resolve();
+  assert.equal(collapseCalls.length, 1);
+  assert.equal(collapsed, true);
+
+  dockRoot
+    .querySelector<HTMLButtonElement>('button[data-dock-action="close"]')
+    ?.click();
+  await Promise.resolve();
+  assert.equal(collapseCalls.length, 2);
+  assert.equal(collapsed, true);
+
   backendHandler?.({ type: "OPEN_TRACKER" });
   await Promise.resolve();
 
-  assert.equal(expandCalls.length, 3);
+  assert.equal(expandCalls.length, 2);
   assert.match(drawerRoot.textContent ?? "", /General|Living World Engine/i);
   assert.match(dockRoot.textContent ?? "", /Overview|People|Agency/i);
 

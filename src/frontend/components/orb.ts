@@ -9,18 +9,18 @@ type OrbHandle = {
 export function renderOrb(input: {
   orb: OrbHandle;
   settings: FrontendSettings;
-  onOpen(): void;
+  onToggle(): void;
 }): void {
   input.orb.root.innerHTML = `
     <button class="lwe-orb" type="button">
-      <strong>LWE</strong>
-      <span>Foundation active</span>
+      <strong>Living World</strong>
+      <span>Tracker toggle</span>
     </button>
   `;
   input.orb.root
     .querySelector<HTMLButtonElement>("button")
     ?.addEventListener("click", () => {
-      input.onOpen();
+      input.onToggle();
     });
   input.orb.setVisible(input.settings.orbVisible);
 }
