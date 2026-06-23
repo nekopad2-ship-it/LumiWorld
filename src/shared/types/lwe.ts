@@ -101,8 +101,21 @@ export type WorldGraph = {
     clock: WorldClock;
     locations: Record<string, { id: string; label: string; updatedAt: string }>;
     entities: Record<string, EntityRecord>;
-    relationships: Record<string, never>;
-    events: Array<{ id: string; kind: string; createdAt: string }>;
+    relationships: Record<string, {
+      sourceId: string;
+      targetId: string;
+      stance: string;
+      evidence: string;
+      updatedAt: string;
+    }>;
+    events: Array<{
+      id: string;
+      kind: string;
+      summary: string;
+      participants: string[];
+      locationId: string | null;
+      createdAt: string;
+    }>;
     actions: Array<{ id: string; kind: string; createdAt: string }>;
     knowledge: Array<{ id: string; scope: string; createdAt: string }>;
     profiles: Record<string, never>;

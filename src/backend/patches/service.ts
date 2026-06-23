@@ -110,6 +110,64 @@ export function createPatchService(input: { storage: JsonStorage }) {
           break;
         case "record_generation_correlation":
           break;
+        case "upsert_entity":
+          nextGraph.world.entities[operation.entity.id] = {
+            id: operation.entity.id,
+            kind: operation.entity.kind,
+            name: operation.entity.name,
+            source: operation.entity.source,
+            createdAt: patch.createdAt,
+            updatedAt: patch.createdAt,
+          };
+          break;
+        case "upsert_location":
+          nextGraph.world.locations[operation.location.id] = {
+            id: operation.location.id,
+            label: operation.location.label,
+            updatedAt: patch.createdAt,
+          };
+          break;
+        case "append_event":
+          nextGraph.world.events = [
+            ...nextGraph.world.events,
+            {
+              id: operation.event.id,
+              kind: operation.event.kind,
+              summary: operation.event.summary,
+              participants: operation.event.participants,
+              locationId: operation.event.locationId,
+              createdAt: operation.event.createdAt,
+            },
+          ];
+          break;
+        case "advance_clock":
+          nextGraph.world.clock.currentTime = operation.currentTime;
+          nextGraph.world.clock.lastAdvanceSource = operation.source;
+          break;
+        case "append_committed_fact":
+          nextGraph.world.events = [
+            ...nextGraph.world.events,
+            {
+              id: `committed:${nextGraph.world.events.length + 1}`,
+              kind: "committed_fact",
+              summary: operation.fact,
+              participants: [],
+              locationId: null,
+              createdAt: patch.createdAt,
+            },
+          ];
+          break;
+        case "upsert_relationship":
+          nextGraph.world.relationships[
+            `${operation.relationship.sourceId}->${operation.relationship.targetId}`
+          ] = {
+            sourceId: operation.relationship.sourceId,
+            targetId: operation.relationship.targetId,
+            stance: operation.relationship.stance,
+            evidence: operation.relationship.evidence,
+            updatedAt: operation.relationship.updatedAt,
+          };
+          break;
       }
     }
 
