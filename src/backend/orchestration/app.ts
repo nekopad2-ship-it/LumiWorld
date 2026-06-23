@@ -257,6 +257,8 @@ export function createBackendApp(spindle: SpindleAPI) {
                   `LWE State Extraction failed: ${result.error ?? "unknown error"}`,
                 );
               }
+            }).catch((error: unknown) => {
+              spindle.log.warn(`LWE Extraction crashed: ${String(error)}`);
             });
         }
       }
