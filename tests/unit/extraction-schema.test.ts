@@ -97,6 +97,38 @@ test("convertExtractionToPatches produces correct PatchOperations", () => {
   assert.equal(ops[5]!.type, "upsert_relationship");
 });
 
+test("validateExtractionResult rejects invalid entity source", () => {
+  const result = {
+    entities: [{ id: "e1", kind: "npc", name: "Test", source: "ai_generated" }],
+    locations: [], events: [], committedFacts: [], relationships: [],
+  };
+  const errors = validateExtractionResult(result);
+  assert.ok(errors.some(e => e.includes("source")));
+});
+
+test("validateExtractionResult rejects relationship missing sourceId", () => {
+  const result = {
+    entities: [], locations: [], events: [], committedFacts: [], timeCue: null,
+    relationships: [{ targetId: "t1", stance: "friendly", evidence: "test" }],
+  };
+  const errors = validateExtractionResult(result);
+  assert.ok(errors.some(e => e.includes("sourceId")));
+});
+
+test("validateExtractionResult rejects non-string participants", () => {
+  const result = {
+    entities: [], locations: [], committedFacts: [],
+    relationships: [],
+    events: [{
+      id: "evt_1", kind: "interaction", summary: "test",
+      participants: ["valid", 123],
+      locationId: null,
+    }],
+  };
+  const errors = validateExtractionResult(result);
+  assert.ok(errors.some(e => e.includes("participants")));
+});
+
 test("validateExtractionResult handles empty valid result", () => {
   const result = {
     entities: [],

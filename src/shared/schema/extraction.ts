@@ -50,6 +50,8 @@ const VALID_ENTITY_KINDS = new Set([
   "object",
 ]);
 
+const VALID_ENTITY_SOURCES = new Set(["seed", "user", "system"]);
+
 export function validateExtractionResult(
   value: unknown,
 ): string[] {
@@ -69,6 +71,7 @@ export function validateExtractionResult(
       if (!e.id || typeof e.id !== "string") errors.push(`entities[${i}]: missing or invalid id`);
       if (!VALID_ENTITY_KINDS.has(String(e.kind))) errors.push(`entities[${i}]: invalid kind "${String(e.kind)}"`);
       if (!e.name || typeof e.name !== "string") errors.push(`entities[${i}]: missing or invalid name`);
+      if (!VALID_ENTITY_SOURCES.has(String(e.source))) errors.push(`entities[${i}]: invalid source "${String(e.source)}"`);
     }
   }
 
@@ -91,6 +94,7 @@ export function validateExtractionResult(
       if (!evt.kind || typeof evt.kind !== "string") errors.push(`events[${i}]: missing kind`);
       if (!evt.summary || typeof evt.summary !== "string") errors.push(`events[${i}]: missing summary`);
       if (!Array.isArray(evt.participants)) errors.push(`events[${i}]: participants must be an array`);
+      if (Array.isArray(evt.participants) && !evt.participants.every((p: unknown) => typeof p === "string")) errors.push(`events[${i}]: participants must be strings`);
     }
   }
 
@@ -100,6 +104,13 @@ export function validateExtractionResult(
 
   if (!Array.isArray(raw.relationships)) {
     errors.push("Extraction result must have a relationships array");
+  } else {
+    for (let i = 0; i < raw.relationships.length; i++) {
+      const rel = raw.relationships[i] as Record<string, unknown>;
+      if (!rel.sourceId || typeof rel.sourceId !== "string") errors.push(`relationships[${i}]: missing or invalid sourceId`);
+      if (!rel.targetId || typeof rel.targetId !== "string") errors.push(`relationships[${i}]: missing or invalid targetId`);
+      if (!rel.stance || typeof rel.stance !== "string") errors.push(`relationships[${i}]: missing or invalid stance`);
+    }
   }
 
   if (raw.timeCue !== null && typeof raw.timeCue === "object") {
