@@ -8,9 +8,6 @@ export type CommitDecision = {
     | "generation_in_progress"
     | "unknown_generation";
 };
-
-const ELIGIBLE_GENERATION_TYPES = new Set(["normal"]);
-
 export function createCommitGuard(input: {
   correlationService: GenerationCorrelationService;
 }) {
@@ -25,7 +22,7 @@ export function createCommitGuard(input: {
       return { eligible: false, reason: "generation_in_progress" };
     }
 
-    if (!ELIGIBLE_GENERATION_TYPES.has(record.generationType)) {
+    if (!record.commitEligible) {
       return { eligible: false, reason: "non_eligible_generation_type" };
     }
 
