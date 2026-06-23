@@ -67,3 +67,7 @@ export function createGenerationCorrelationService() {
     },
   };
 }
+
+export type GenerationCorrelationService = ReturnType<
+  typeof createGenerationCorrelationService
+>;
