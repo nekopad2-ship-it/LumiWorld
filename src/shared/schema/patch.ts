@@ -43,12 +43,43 @@ export function validatePatchOperations(
     }
     if (
       op.type === "append_event" &&
-      (!op.event.id || !op.event.kind || !op.event.summary)
+      (!op.event.id ||
+        !op.event.kind ||
+        !op.event.summary ||
+        !Array.isArray(op.event.participants) ||
+        !op.event.createdAt)
     ) {
-      errors.push("append_event: missing required fields (id, kind, summary)");
+      errors.push(
+        "append_event: missing required fields (id, kind, summary, participants, createdAt)",
+      );
     }
-    if (op.type === "advance_clock" && !op.currentTime) {
-      errors.push("advance_clock: missing currentTime");
+    if (
+      op.type === "advance_clock" &&
+      (!op.currentTime || !op.source)
+    ) {
+      errors.push("advance_clock: missing required fields (currentTime, source)");
+    }
+    if (
+      op.type === "upsert_location" &&
+      (!op.location.id || !op.location.label)
+    ) {
+      errors.push("upsert_location: missing required fields (location.id, location.label)");
+    }
+    if (
+      op.type === "append_committed_fact" &&
+      !op.fact
+    ) {
+      errors.push("append_committed_fact: missing required field (fact)");
+    }
+    if (
+      op.type === "upsert_relationship" &&
+      (!op.relationship.sourceId ||
+        !op.relationship.targetId ||
+        !op.relationship.stance)
+    ) {
+      errors.push(
+        "upsert_relationship: missing required fields (sourceId, targetId, stance)",
+      );
     }
   }
   return errors;
