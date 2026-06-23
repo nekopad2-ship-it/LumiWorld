@@ -155,6 +155,49 @@ export type PatchOperation =
       type: "record_generation_correlation";
       generationId: string;
       generationType: string;
+    }
+  | {
+      type: "upsert_entity";
+      entity: {
+        id: string;
+        kind: "player" | "character_card_principal" | "npc" | "location" | "faction" | "object";
+        name: string;
+        source: "seed" | "user" | "system";
+      };
+    }
+  | {
+      type: "upsert_location";
+      location: { id: string; label: string };
+    }
+  | {
+      type: "append_event";
+      event: {
+        id: string;
+        kind: string;
+        summary: string;
+        participants: string[];
+        locationId: string | null;
+        createdAt: string;
+      };
+    }
+  | {
+      type: "advance_clock";
+      currentTime: string;
+      source: string;
+    }
+  | {
+      type: "append_committed_fact";
+      fact: string;
+    }
+  | {
+      type: "upsert_relationship";
+      relationship: {
+        sourceId: string;
+        targetId: string;
+        stance: string;
+        evidence: string;
+        updatedAt: string;
+      };
     };
 
 export type PatchProvenance = {
