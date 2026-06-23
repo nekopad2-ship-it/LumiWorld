@@ -46,7 +46,8 @@ test("rebuild service extracts entities from history batch", async () => {
         relationships: [
           { sourceId: "ken", targetId: "arlo", stance: "unknown", evidence: "first meeting" },
         ],
-        approximateTimeCue: "morning",
+        committedFacts: [],
+        timeCue: { time: "morning", source: "narrative_cue" },
       });
     },
   });
@@ -94,7 +95,8 @@ test("rebuild service handles empty history gracefully", async () => {
         locations: [],
         events: [],
         relationships: [],
-        approximateTimeCue: null,
+        committedFacts: [],
+        timeCue: null,
       });
     },
   });
@@ -139,6 +141,66 @@ test("rebuild service handles sidecar failure gracefully", async () => {
       { role: "user", content: "Hello" },
       { role: "assistant", content: "Hi" },
     ],
+  });
+
+  assert.equal(result.applied, false);
+  assert.ok(result.error);
+});
+
+test("rebuild service handles malformed JSON from sidecar", async () => {
+  const storage = createInMemoryStorage();
+  const patchService = createPatchService({ storage });
+  const settings = createDefaultSettings();
+
+  await patchService.applyPatch(
+    createPatchEnvelope({
+      patchId: "init-rb4", chatId: "chat-rb-4",
+      baseRevision: 0, sourceTask: "test",
+      operations: [{ type: "initialize_graph", settings }],
+      provenance: { source: "test", detail: "init" },
+    }),
+  );
+
+  const rebuild = createRebuildService({
+    applyPatch: patchService.applyPatch.bind(patchService),
+    sidecarCaller: async () => "not json{{{",
+  });
+
+  const result = await rebuild.rebuildFromHistory({
+    chatId: "chat-rb-4", revision: 1,
+    messages: [{ role: "user", content: "Hi" }],
+  });
+
+  assert.equal(result.applied, false);
+  assert.ok(result.error);
+  assert.match(result.error!, /json/i);
+});
+
+test("rebuild service rejects sidecar response with validation errors", async () => {
+  const storage = createInMemoryStorage();
+  const patchService = createPatchService({ storage });
+  const settings = createDefaultSettings();
+
+  await patchService.applyPatch(
+    createPatchEnvelope({
+      patchId: "init-rb5", chatId: "chat-rb-5",
+      baseRevision: 0, sourceTask: "test",
+      operations: [{ type: "initialize_graph", settings }],
+      provenance: { source: "test", detail: "init" },
+    }),
+  );
+
+  const rebuild = createRebuildService({
+    applyPatch: patchService.applyPatch.bind(patchService),
+    sidecarCaller: async () => JSON.stringify({
+      entities: [{ id: "bad", kind: "invalid", name: "Bad", source: "system" }],
+      locations: [], events: [], timeCue: null, committedFacts: [], relationships: [],
+    }),
+  });
+
+  const result = await rebuild.rebuildFromHistory({
+    chatId: "chat-rb-5", revision: 1,
+    messages: [{ role: "user", content: "Hi" }],
   });
 
   assert.equal(result.applied, false);

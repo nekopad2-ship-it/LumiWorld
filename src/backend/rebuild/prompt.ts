@@ -8,7 +8,7 @@ Rules:
 - Dialogue claims are NOT objective truth.
 - Prefer omission over invention when uncertain.
 
-Return ONLY a valid JSON object with fields: entities[], locations[], events[], relationships[], approximateTimeCue (string or null).`;
+Return ONLY a valid JSON object with fields: entities[], locations[], events[], relationships[], timeCue (null or {time, source}).`;
 }
 
 export function buildRebuildUserPrompt(input: {
@@ -22,5 +22,5 @@ export function buildRebuildUserPrompt(input: {
 
 ${conversationText}
 
-Return JSON with: entities (id, kind, name, source), locations (id, label), events (id, kind, summary, participants, locationId), relationships (sourceId, targetId, stance, evidence), approximateTimeCue (string or null).`;
+Return JSON with: entities (id, kind, name, source), locations (id, label), events (id, kind, summary, participants, locationId), relationships (sourceId, targetId, stance, evidence), timeCue (null or {time, source}).`;
 }

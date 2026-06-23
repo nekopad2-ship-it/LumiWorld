@@ -1,9 +1,11 @@
 import { buildRebuildUserPrompt } from "./prompt.js";
+import {
+  convertExtractionToPatches,
+  validateExtractionResult,
+} from "../../shared/schema/extraction.js";
 import { createPatchEnvelope } from "../../shared/schema/patch.js";
-import type { PatchOperation, PatchEnvelope, PatchApplyResult } from "../../shared/types/lwe.js";
-
-type PatchApplyFn = (patch: PatchEnvelope) => Promise<PatchApplyResult>;
-type SidecarCaller = (prompt: string) => Promise<string>;
+import type { ExtractionResult } from "../../shared/schema/extraction.js";
+import type { PatchEnvelope, PatchApplyResult } from "../../shared/types/lwe.js";
 
 export type RebuildInput = {
   chatId: string;
@@ -18,8 +20,8 @@ export type RebuildOutput = {
 };
 
 export function createRebuildService(input: {
-  applyPatch: PatchApplyFn;
-  sidecarCaller: SidecarCaller;
+  applyPatch: (patch: PatchEnvelope) => Promise<PatchApplyResult>;
+  sidecarCaller: (prompt: string) => Promise<string>;
 }) {
   async function rebuildFromHistory(
     rebuildInput: RebuildInput,
@@ -35,7 +37,7 @@ export function createRebuildService(input: {
 
       const rawResponse = await input.sidecarCaller(prompt);
 
-      let parsed: Record<string, unknown>;
+      let parsed: unknown;
       try {
         parsed = JSON.parse(rawResponse);
       } catch {
@@ -46,79 +48,17 @@ export function createRebuildService(input: {
         };
       }
 
-      const operations: PatchOperation[] = [];
-
-      // Parse entities
-      const entities = parsed.entities;
-      if (Array.isArray(entities)) {
-        for (const entity of entities) {
-          if (entity && typeof entity.id === "string" && typeof entity.kind === "string" && typeof entity.name === "string") {
-            operations.push({
-              type: "upsert_entity",
-              entity: {
-                id: entity.id,
-                kind: entity.kind as any,
-                name: entity.name,
-                source: (typeof entity.source === "string" ? entity.source : "system") as any,
-              },
-            });
-          }
-        }
+      const validationErrors = validateExtractionResult(parsed);
+      if (validationErrors.length > 0) {
+        return {
+          applied: false,
+          entitiesCount: 0,
+          error: `Rebuild validation failed: ${validationErrors.join("; ")}`,
+        };
       }
 
-      // Parse locations
-      const locations = parsed.locations;
-      if (Array.isArray(locations)) {
-        for (const loc of locations) {
-          if (loc && typeof loc.id === "string" && typeof loc.label === "string") {
-            operations.push({
-              type: "upsert_location",
-              location: { id: loc.id, label: loc.label },
-            });
-          }
-        }
-      }
-
-      // Parse events
-      const events = parsed.events;
-      if (Array.isArray(events)) {
-        for (const evt of events) {
-          if (evt && typeof evt.id === "string" && typeof evt.kind === "string" && typeof evt.summary === "string") {
-            operations.push({
-              type: "append_event",
-              event: {
-                id: evt.id,
-                kind: evt.kind,
-                summary: evt.summary,
-                participants: Array.isArray(evt.participants)
-                  ? evt.participants.map(String)
-                  : [],
-                locationId: typeof evt.locationId === "string" ? evt.locationId : null,
-                createdAt: new Date().toISOString(),
-              },
-            });
-          }
-        }
-      }
-
-      // Parse relationships
-      const relationships = parsed.relationships;
-      if (Array.isArray(relationships)) {
-        for (const rel of relationships) {
-          if (rel && typeof rel.sourceId === "string" && typeof rel.targetId === "string" && typeof rel.stance === "string") {
-            operations.push({
-              type: "upsert_relationship",
-              relationship: {
-                sourceId: rel.sourceId,
-                targetId: rel.targetId,
-                stance: rel.stance,
-                evidence: typeof rel.evidence === "string" ? rel.evidence : "",
-                updatedAt: new Date().toISOString(),
-              },
-            });
-          }
-        }
-      }
+      const extraction = parsed as ExtractionResult;
+      const operations = convertExtractionToPatches(extraction);
 
       if (operations.length === 0) {
         return { applied: true, entitiesCount: 0 };
@@ -146,7 +86,6 @@ export function createRebuildService(input: {
         };
       }
 
-      // Count entity operations
       const entityCount = operations.filter((op) => op.type === "upsert_entity").length;
       return { applied: true, entitiesCount: entityCount };
     } catch (error) {
