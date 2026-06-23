@@ -8,7 +8,9 @@ import type {
   GenerationType,
   PendingGenerationMetadata,
 } from "../../shared/types/lwe.js";
+import { createCommitGuard } from "../lifecycle/commit-guard.js";
 import { createGenerationCorrelationService } from "../lifecycle/correlation.js";
+import { createStateExtractor } from "../extraction/service.js";
 import { createPatchService } from "../patches/service.js";
 import {
   buildSceneImpactSystemMessage,
@@ -27,6 +29,25 @@ export function createBackendApp(spindle: SpindleAPI) {
   );
   const patchService = createPatchService({ storage });
   const generationCorrelation = createGenerationCorrelationService();
+  const commitGuard = createCommitGuard({ correlationService: generationCorrelation });
+
+  // Default sidecar caller — returns empty extraction.
+  // In Phase 3+, this will use the configured sidecar connection.
+  const extractorSidecarCaller = async (_prompt: string): Promise<string> => {
+    return JSON.stringify({
+      entities: [],
+      locations: [],
+      events: [],
+      timeCue: null,
+      committedFacts: [],
+      relationships: [],
+    });
+  };
+
+  const stateExtractor = createStateExtractor({
+    applyPatch: patchService.applyPatch.bind(patchService),
+    sidecarCaller: extractorSidecarCaller,
+  });
 
   async function ensureGraph(chatId: string): Promise<void> {
     const existing = await patchService.getGraph(chatId);
@@ -193,8 +214,52 @@ export function createBackendApp(spindle: SpindleAPI) {
       "generationId",
       "generation_id",
     );
+    const chatId = readStringField(detail, "chatId", "chat_id");
     if (generationId) {
       generationCorrelation.onGenerationEnded({ generationId });
+    }
+
+    // Trigger state extraction for commit-eligible generations
+    if (generationId && chatId) {
+      const decision = commitGuard.shouldCommit(generationId);
+      if (decision.eligible) {
+        const userMessage = readStringField(
+          detail,
+          "userMessage",
+          "user_message",
+          "userText",
+          "user_text",
+        );
+        const assistantMessage = readStringField(
+          detail,
+          "assistantMessage",
+          "assistant_message",
+          "responseText",
+          "response_text",
+        );
+
+        if (userMessage && assistantMessage) {
+          const record = generationCorrelation.getRecord(generationId);
+          const revision = record?.provisionalRevision ?? 1;
+
+          // Fire-and-forget: do not block generation completion
+          stateExtractor
+            .extractAndApply({
+              chatId,
+              generationId,
+              revision,
+              userMessage,
+              assistantMessage,
+            })
+            .then((result) => {
+              if (!result.applied) {
+                spindle.log.warn(
+                  `LWE State Extraction failed: ${result.error ?? "unknown error"}`,
+                );
+              }
+            });
+        }
+      }
     }
   });
 
