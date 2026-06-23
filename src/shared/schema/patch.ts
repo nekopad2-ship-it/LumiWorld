@@ -81,6 +81,12 @@ export function validatePatchOperations(
         "upsert_relationship: missing required fields (sourceId, targetId, stance)",
       );
     }
+    if (op.type === "upsert_relationship" && !op.relationship.evidence) {
+      errors.push("upsert_relationship: missing required field (evidence)");
+    }
+    if (op.type === "upsert_relationship" && !op.relationship.updatedAt) {
+      errors.push("upsert_relationship: missing required field (updatedAt)");
+    }
   }
   return errors;
 }

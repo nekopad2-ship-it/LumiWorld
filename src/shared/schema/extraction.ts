@@ -90,6 +90,7 @@ export function validateExtractionResult(
       if (!evt.id || typeof evt.id !== "string") errors.push(`events[${i}]: missing id`);
       if (!evt.kind || typeof evt.kind !== "string") errors.push(`events[${i}]: missing kind`);
       if (!evt.summary || typeof evt.summary !== "string") errors.push(`events[${i}]: missing summary`);
+      if (!Array.isArray(evt.participants)) errors.push(`events[${i}]: participants must be an array`);
     }
   }
 
@@ -114,7 +115,6 @@ export function validateExtractionResult(
 
 export function convertExtractionToPatches(
   extraction: ExtractionResult,
-  chatId: string,
 ): PatchOperation[] {
   const operations: PatchOperation[] = [];
 
