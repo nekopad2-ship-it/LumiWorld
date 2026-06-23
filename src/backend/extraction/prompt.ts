@@ -9,7 +9,13 @@ Rules:
 - If no time cue is present, return timeCue as null.
 - Use stable entity IDs: snake_case derived from the entity name.
 
-Return ONLY a valid JSON object matching the required schema.`;
+Return ONLY a valid JSON object with these fields:
+- entities[]: { id: string, kind: "player"|"character_card_principal"|"npc"|"location"|"faction"|"object", name: string, source: "seed"|"user"|"system" }
+- locations[]: { id: string, label: string }
+- events[]: { id: string, kind: string, summary: string, participants: string[], locationId: string|null }
+- timeCue: null | { time: string, source: string }
+- committedFacts: string[]
+- relationships[]: { sourceId: string, targetId: string, stance: string, evidence: string }`;
 }
 
 export function buildExtractionUserPrompt(input: {
@@ -24,5 +30,5 @@ ${input.userMessage}
 Assistant response:
 ${input.assistantMessage}
 
-Return JSON with: entities[], locations[], events[], timeCue (null or object with time+source), committedFacts[], relationships[].`;
+Return a JSON object with: entities[], locations[], events[], timeCue (null or {time, source}), committedFacts[], relationships[].`;
 }
