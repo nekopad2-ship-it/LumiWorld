@@ -31,7 +31,12 @@ test("rebuild service extracts entities from history batch", async () => {
         entities: [
           { id: "ken", kind: "npc", name: "Ken", source: "system" },
           { id: "arlo", kind: "npc", name: "Arlo", source: "system" },
-          { id: "shop", kind: "location", name: "Arlo's Shop", source: "system" },
+          {
+            id: "shop",
+            kind: "location",
+            name: "Arlo's Shop",
+            source: "system",
+          },
         ],
         locations: [{ id: "shop", label: "Arlo's Shop" }],
         events: [
@@ -44,7 +49,12 @@ test("rebuild service extracts entities from history batch", async () => {
           },
         ],
         relationships: [
-          { sourceId: "ken", targetId: "arlo", stance: "unknown", evidence: "first meeting" },
+          {
+            sourceId: "ken",
+            targetId: "arlo",
+            stance: "unknown",
+            evidence: "first meeting",
+          },
         ],
         committedFacts: [],
         timeCue: { time: "morning", source: "narrative_cue" },
@@ -57,7 +67,10 @@ test("rebuild service extracts entities from history batch", async () => {
     revision: 1,
     messages: [
       { role: "user", content: "I walk into the shop." },
-      { role: "assistant", content: "Ken enters Arlo's shop. The merchant looks up." },
+      {
+        role: "assistant",
+        content: "Ken enters Arlo's shop. The merchant looks up.",
+      },
     ],
   });
 
@@ -154,8 +167,10 @@ test("rebuild service handles malformed JSON from sidecar", async () => {
 
   await patchService.applyPatch(
     createPatchEnvelope({
-      patchId: "init-rb4", chatId: "chat-rb-4",
-      baseRevision: 0, sourceTask: "test",
+      patchId: "init-rb4",
+      chatId: "chat-rb-4",
+      baseRevision: 0,
+      sourceTask: "test",
       operations: [{ type: "initialize_graph", settings }],
       provenance: { source: "test", detail: "init" },
     }),
@@ -167,13 +182,14 @@ test("rebuild service handles malformed JSON from sidecar", async () => {
   });
 
   const result = await rebuild.rebuildFromHistory({
-    chatId: "chat-rb-4", revision: 1,
+    chatId: "chat-rb-4",
+    revision: 1,
     messages: [{ role: "user", content: "Hi" }],
   });
 
   assert.equal(result.applied, false);
   assert.ok(result.error);
-  assert.match(result.error!, /json/i);
+  assert.match(result.error, /json/i);
 });
 
 test("rebuild service rejects sidecar response with validation errors", async () => {
@@ -183,8 +199,10 @@ test("rebuild service rejects sidecar response with validation errors", async ()
 
   await patchService.applyPatch(
     createPatchEnvelope({
-      patchId: "init-rb5", chatId: "chat-rb-5",
-      baseRevision: 0, sourceTask: "test",
+      patchId: "init-rb5",
+      chatId: "chat-rb-5",
+      baseRevision: 0,
+      sourceTask: "test",
       operations: [{ type: "initialize_graph", settings }],
       provenance: { source: "test", detail: "init" },
     }),
@@ -192,14 +210,22 @@ test("rebuild service rejects sidecar response with validation errors", async ()
 
   const rebuild = createRebuildService({
     applyPatch: patchService.applyPatch.bind(patchService),
-    sidecarCaller: async () => JSON.stringify({
-      entities: [{ id: "bad", kind: "invalid", name: "Bad", source: "system" }],
-      locations: [], events: [], timeCue: null, committedFacts: [], relationships: [],
-    }),
+    sidecarCaller: async () =>
+      JSON.stringify({
+        entities: [
+          { id: "bad", kind: "invalid", name: "Bad", source: "system" },
+        ],
+        locations: [],
+        events: [],
+        timeCue: null,
+        committedFacts: [],
+        relationships: [],
+      }),
   });
 
   const result = await rebuild.rebuildFromHistory({
-    chatId: "chat-rb-5", revision: 1,
+    chatId: "chat-rb-5",
+    revision: 1,
     messages: [{ role: "user", content: "Hi" }],
   });
 

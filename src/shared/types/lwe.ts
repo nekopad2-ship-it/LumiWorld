@@ -101,13 +101,16 @@ export type WorldGraph = {
     clock: WorldClock;
     locations: Record<string, { id: string; label: string; updatedAt: string }>;
     entities: Record<string, EntityRecord>;
-    relationships: Record<string, {
-      sourceId: string;
-      targetId: string;
-      stance: string;
-      evidence: string;
-      updatedAt: string;
-    }>;
+    relationships: Record<
+      string,
+      {
+        sourceId: string;
+        targetId: string;
+        stance: string;
+        evidence: string;
+        updatedAt: string;
+      }
+    >;
     events: Array<{
       id: string;
       kind: string;
@@ -173,7 +176,13 @@ export type PatchOperation =
       type: "upsert_entity";
       entity: {
         id: string;
-        kind: "player" | "character_card_principal" | "npc" | "location" | "faction" | "object";
+        kind:
+          | "player"
+          | "character_card_principal"
+          | "npc"
+          | "location"
+          | "faction"
+          | "object";
         name: string;
         source: "seed" | "user" | "system";
       };

@@ -35,9 +35,14 @@ export function validatePatchOperations(
   for (const op of operations) {
     if (
       op.type === "upsert_entity" &&
-      !["player", "character_card_principal", "npc", "location", "faction", "object"].includes(
-        op.entity.kind,
-      )
+      ![
+        "player",
+        "character_card_principal",
+        "npc",
+        "location",
+        "faction",
+        "object",
+      ].includes(op.entity.kind)
     ) {
       errors.push(`upsert_entity: invalid kind "${op.entity.kind}"`);
     }
@@ -53,22 +58,20 @@ export function validatePatchOperations(
         "append_event: missing required fields (id, kind, summary, participants, createdAt)",
       );
     }
-    if (
-      op.type === "advance_clock" &&
-      (!op.currentTime || !op.source)
-    ) {
-      errors.push("advance_clock: missing required fields (currentTime, source)");
+    if (op.type === "advance_clock" && (!op.currentTime || !op.source)) {
+      errors.push(
+        "advance_clock: missing required fields (currentTime, source)",
+      );
     }
     if (
       op.type === "upsert_location" &&
       (!op.location.id || !op.location.label)
     ) {
-      errors.push("upsert_location: missing required fields (location.id, location.label)");
+      errors.push(
+        "upsert_location: missing required fields (location.id, location.label)",
+      );
     }
-    if (
-      op.type === "append_committed_fact" &&
-      !op.fact
-    ) {
+    if (op.type === "append_committed_fact" && !op.fact) {
       errors.push("append_committed_fact: missing required field (fact)");
     }
     if (

@@ -3,15 +3,16 @@ import assert from "node:assert/strict";
 
 import { createGenerationCorrelationService } from "../../src/backend/lifecycle/correlation.js";
 import { createCommitGuard } from "../../src/backend/lifecycle/commit-guard.js";
+import type { GenerationType } from "../../src/shared/types/lwe.js";
 
 function makeServiceWithRecord(
-  generationType: string,
+  generationType: GenerationType,
   status: "started" | "ended" | "stopped" = "ended",
 ) {
   const correlationService = createGenerationCorrelationService();
   correlationService.capturePendingFromInterceptor({
     chatId: "chat-1",
-    generationType: generationType as any,
+    generationType,
     provisionalRevision: 1,
     timestamp: "2026-06-22T00:00:00.000Z",
   });

@@ -29,19 +29,24 @@ export function createBackendApp(spindle: SpindleAPI) {
   );
   const patchService = createPatchService({ storage });
   const generationCorrelation = createGenerationCorrelationService();
-  const commitGuard = createCommitGuard({ correlationService: generationCorrelation });
+  const commitGuard = createCommitGuard({
+    correlationService: generationCorrelation,
+  });
 
   // Default sidecar caller — returns empty extraction.
   // In Phase 3+, this will use the configured sidecar connection.
-  const extractorSidecarCaller = async (_prompt: string): Promise<string> => {
-    return JSON.stringify({
-      entities: [],
-      locations: [],
-      events: [],
-      timeCue: null,
-      committedFacts: [],
-      relationships: [],
-    });
+  const extractorSidecarCaller = (prompt: string): Promise<string> => {
+    void prompt;
+    return Promise.resolve(
+      JSON.stringify({
+        entities: [],
+        locations: [],
+        events: [],
+        timeCue: null,
+        committedFacts: [],
+        relationships: [],
+      }),
+    );
   };
 
   const stateExtractor = createStateExtractor({
@@ -257,7 +262,8 @@ export function createBackendApp(spindle: SpindleAPI) {
                   `LWE State Extraction failed: ${result.error ?? "unknown error"}`,
                 );
               }
-            }).catch((error: unknown) => {
+            })
+            .catch((error: unknown) => {
               spindle.log.warn(`LWE Extraction crashed: ${String(error)}`);
             });
         }

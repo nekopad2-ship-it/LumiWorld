@@ -5,7 +5,10 @@ import {
 } from "../../shared/schema/extraction.js";
 import { createPatchEnvelope } from "../../shared/schema/patch.js";
 import type { ExtractionResult } from "../../shared/schema/extraction.js";
-import type { PatchEnvelope, PatchApplyResult } from "../../shared/types/lwe.js";
+import type {
+  PatchEnvelope,
+  PatchApplyResult,
+} from "../../shared/types/lwe.js";
 
 export type SidecarCaller = (prompt: string) => Promise<string>;
 

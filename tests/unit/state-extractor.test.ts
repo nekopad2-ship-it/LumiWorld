@@ -73,7 +73,12 @@ test("state extractor applies entity extraction via sidecar", async () => {
       JSON.stringify({
         entities: [
           { id: "dena", kind: "npc", name: "Dena", source: "system" },
-          { id: "market_square", kind: "location", name: "Market Square", source: "system" },
+          {
+            id: "market_square",
+            kind: "location",
+            name: "Market Square",
+            source: "system",
+          },
         ],
         locations: [{ id: "market_square", label: "Market Square" }],
         events: [
@@ -139,7 +144,7 @@ test("state extractor handles sidecar returning malformed JSON", async () => {
 
   assert.equal(result.applied, false);
   assert.ok(result.error);
-  assert.match(result.error!, /json/i);
+  assert.match(result.error, /json/i);
 });
 
 test("state extractor rejects extraction with validation errors", async () => {
@@ -162,7 +167,9 @@ test("state extractor rejects extraction with validation errors", async () => {
     applyPatch: patchService.applyPatch.bind(patchService),
     sidecarCaller: async () =>
       JSON.stringify({
-        entities: [{ id: "bad", kind: "invalid_kind", name: "Bad", source: "system" }],
+        entities: [
+          { id: "bad", kind: "invalid_kind", name: "Bad", source: "system" },
+        ],
         locations: [],
         events: [],
         timeCue: null,
@@ -181,7 +188,7 @@ test("state extractor rejects extraction with validation errors", async () => {
 
   assert.equal(result.applied, false);
   assert.ok(result.error);
-  assert.match(result.error!, /kind/i);
+  assert.match(result.error, /kind/i);
 });
 
 test("state extractor handles sidecar throwing an error", async () => {
@@ -217,7 +224,7 @@ test("state extractor handles sidecar throwing an error", async () => {
 
   assert.equal(result.applied, false);
   assert.ok(result.error);
-  assert.match(result.error!, /error/i);
+  assert.match(result.error, /error/i);
 });
 
 test("state extractor uses buildExtractionUserPrompt to build prompt", async () => {
@@ -260,8 +267,14 @@ test("state extractor uses buildExtractionUserPrompt to build prompt", async () 
     assistantMessage: "You are in the tavern.",
   });
 
-  assert.ok(capturedPrompt.includes("Where am I?"), "prompt should contain user message");
-  assert.ok(capturedPrompt.includes("You are in the tavern."), "prompt should contain assistant message");
+  assert.ok(
+    capturedPrompt.includes("Where am I?"),
+    "prompt should contain user message",
+  );
+  assert.ok(
+    capturedPrompt.includes("You are in the tavern."),
+    "prompt should contain assistant message",
+  );
 });
 
 test("state extractor returns error when patch is rejected due to revision mismatch", async () => {
@@ -304,5 +317,5 @@ test("state extractor returns error when patch is rejected due to revision misma
 
   assert.equal(result.applied, false);
   assert.ok(result.error);
-  assert.match(result.error!, /patch rejected/i);
+  assert.match(result.error, /patch rejected/i);
 });

@@ -7,9 +7,7 @@ import {
 
 test("valid extraction result passes validation", () => {
   const result = {
-    entities: [
-      { id: "entity_1", kind: "npc", name: "Dena", source: "system" },
-    ],
+    entities: [{ id: "entity_1", kind: "npc", name: "Dena", source: "system" }],
     locations: [{ id: "loc_1", label: "Market Square" }],
     events: [
       {
@@ -42,7 +40,9 @@ test("extraction result rejects missing required fields", () => {
 
 test("extraction result rejects invalid entity kind", () => {
   const result = {
-    entities: [{ id: "e1", kind: "spaceship", name: "Nostromo", source: "system" }],
+    entities: [
+      { id: "e1", kind: "spaceship", name: "Nostromo", source: "system" },
+    ],
     locations: [],
     events: [],
     committedFacts: [],
@@ -80,12 +80,34 @@ test("extraction result rejects event without participants", () => {
 
 test("convertExtractionToPatches produces correct PatchOperations", () => {
   const extraction = {
-    entities: [{ id: "e1", kind: "npc" as const, name: "Dena", source: "system" as const }],
+    entities: [
+      {
+        id: "e1",
+        kind: "npc" as const,
+        name: "Dena",
+        source: "system" as const,
+      },
+    ],
     locations: [{ id: "loc_1", label: "Market" }],
-    events: [{ id: "evt_1", kind: "arrival", summary: "Dena arrived", participants: ["e1"], locationId: "loc_1" }],
+    events: [
+      {
+        id: "evt_1",
+        kind: "arrival",
+        summary: "Dena arrived",
+        participants: ["e1"],
+        locationId: "loc_1",
+      },
+    ],
     timeCue: { time: "afternoon", source: "narrative" },
     committedFacts: ["Dena is at the market"],
-    relationships: [{ sourceId: "e1", targetId: "e2", stance: "friendly", evidence: "greeted warmly" }],
+    relationships: [
+      {
+        sourceId: "e1",
+        targetId: "e2",
+        stance: "friendly",
+        evidence: "greeted warmly",
+      },
+    ],
   };
   const ops = convertExtractionToPatches(extraction);
   assert.equal(ops.length, 6);
@@ -100,33 +122,46 @@ test("convertExtractionToPatches produces correct PatchOperations", () => {
 test("validateExtractionResult rejects invalid entity source", () => {
   const result = {
     entities: [{ id: "e1", kind: "npc", name: "Test", source: "ai_generated" }],
-    locations: [], events: [], committedFacts: [], relationships: [],
+    locations: [],
+    events: [],
+    committedFacts: [],
+    relationships: [],
   };
   const errors = validateExtractionResult(result);
-  assert.ok(errors.some(e => e.includes("source")));
+  assert.ok(errors.some((e) => e.includes("source")));
 });
 
 test("validateExtractionResult rejects relationship missing sourceId", () => {
   const result = {
-    entities: [], locations: [], events: [], committedFacts: [], timeCue: null,
+    entities: [],
+    locations: [],
+    events: [],
+    committedFacts: [],
+    timeCue: null,
     relationships: [{ targetId: "t1", stance: "friendly", evidence: "test" }],
   };
   const errors = validateExtractionResult(result);
-  assert.ok(errors.some(e => e.includes("sourceId")));
+  assert.ok(errors.some((e) => e.includes("sourceId")));
 });
 
 test("validateExtractionResult rejects non-string participants", () => {
   const result = {
-    entities: [], locations: [], committedFacts: [],
+    entities: [],
+    locations: [],
+    committedFacts: [],
     relationships: [],
-    events: [{
-      id: "evt_1", kind: "interaction", summary: "test",
-      participants: ["valid", 123],
-      locationId: null,
-    }],
+    events: [
+      {
+        id: "evt_1",
+        kind: "interaction",
+        summary: "test",
+        participants: ["valid", 123],
+        locationId: null,
+      },
+    ],
   };
   const errors = validateExtractionResult(result);
-  assert.ok(errors.some(e => e.includes("participants")));
+  assert.ok(errors.some((e) => e.includes("participants")));
 });
 
 test("validateExtractionResult handles empty valid result", () => {

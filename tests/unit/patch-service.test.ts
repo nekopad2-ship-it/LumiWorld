@@ -144,7 +144,12 @@ test("upsert_entity updates an existing entity", async () => {
       operations: [
         {
           type: "upsert_entity",
-          entity: { id: "dena", kind: "npc", name: "Dena Updated", source: "system" },
+          entity: {
+            id: "dena",
+            kind: "npc",
+            name: "Dena Updated",
+            source: "system",
+          },
         },
       ],
       provenance: { source: "unit-test", detail: "update entity" },
@@ -272,7 +277,9 @@ test("append_committed_fact appends a committed fact event", async () => {
   assert.equal(result.accepted, true);
 
   const graph = await service.getGraph(chatId);
-  const factEvents = graph!.world.events.filter((e) => e.kind === "committed_fact");
+  const factEvents = graph!.world.events.filter(
+    (e) => e.kind === "committed_fact",
+  );
   assert.equal(factEvents.length, 1);
   assert.equal(factEvents[0]!.summary, "Ken owes Dena 50 gold");
   assert.deepEqual(factEvents[0]!.participants, []);

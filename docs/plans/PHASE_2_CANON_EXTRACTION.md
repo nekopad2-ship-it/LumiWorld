@@ -8,37 +8,38 @@
 
 **Tech Stack:** TypeScript strict, Spindle runtime (`spindle.generate` for sidecar calls), existing patch service, existing generation correlation, Bun test runner, node:test.
 
-**Phase definition:** Phase 2 — Canon extraction (design doc §30). *Must not* begin profile inference (Phase 3) or autonomous action selection (Phase 4).
+**Phase definition:** Phase 2 — Canon extraction (design doc §30). _Must not_ begin profile inference (Phase 3) or autonomous action selection (Phase 4).
 
 ---
 
 ## File Structure
 
-| File | Responsibility |
-|---|---|
-| `src/shared/schema/extraction.ts` | Extraction result type, validate-method, and conversion helpers |
-| `src/shared/types/lwe.ts` | New `PatchOperation` variants for world-state mutations |
-| `src/shared/schema/patch.ts` | Updated `validatePatchOperations` for new op types |
-| `src/backend/lifecycle/commit-guard.ts` | Commit eligibility guard — wraps correlation service, checks generation type vs commit policy |
-| `src/backend/extraction/service.ts` | State Extractor — reads messages, builds prompt, calls sidecar, validates, converts to patches, applies |
-| `src/backend/extraction/prompt.ts` | Builds the state extractor prompt string from settings + user/assistant messages |
-| `src/backend/rebuild/service.ts` | Rebuild service — reads committed chat history in bounded batches, extracts entities/events, populates initial graph |
-| `src/backend/rebuild/prompt.ts` | Builds the rebuild prompt for batch extraction from history |
-| `src/backend/patches/service.ts` | Apply new operation types (`upsert_entity`, `upsert_location`, `append_event`, `advance_clock`, `append_committed_fact`, `upsert_relationship`) |
-| `src/backend/orchestration/app.ts` | Wire lifecycle guard + extraction on `GENERATION_ENDED` |
-| `prompts/state-extractor/v1.md` | Versioned sidecar prompt for state extraction |
-| `prompts/rebuild/v1.md` | Versioned sidecar prompt for cold-start rebuild |
-| `tests/unit/extraction-schema.test.ts` | Schema validation and conversion tests |
-| `tests/unit/commit-guard.test.ts` | Commit guard policy tests |
-| `tests/unit/state-extractor.test.ts` | Extractor service unit tests with mock sidecar |
-| `tests/unit/rebuild.test.ts` | Rebuild service unit tests |
-| `tests/integration/extraction-lifecycle.test.ts` | Integration test: interceptor → generation → extraction → commit flow |
+| File                                             | Responsibility                                                                                                                                  |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/shared/schema/extraction.ts`                | Extraction result type, validate-method, and conversion helpers                                                                                 |
+| `src/shared/types/lwe.ts`                        | New `PatchOperation` variants for world-state mutations                                                                                         |
+| `src/shared/schema/patch.ts`                     | Updated `validatePatchOperations` for new op types                                                                                              |
+| `src/backend/lifecycle/commit-guard.ts`          | Commit eligibility guard — wraps correlation service, checks generation type vs commit policy                                                   |
+| `src/backend/extraction/service.ts`              | State Extractor — reads messages, builds prompt, calls sidecar, validates, converts to patches, applies                                         |
+| `src/backend/extraction/prompt.ts`               | Builds the state extractor prompt string from settings + user/assistant messages                                                                |
+| `src/backend/rebuild/service.ts`                 | Rebuild service — reads committed chat history in bounded batches, extracts entities/events, populates initial graph                            |
+| `src/backend/rebuild/prompt.ts`                  | Builds the rebuild prompt for batch extraction from history                                                                                     |
+| `src/backend/patches/service.ts`                 | Apply new operation types (`upsert_entity`, `upsert_location`, `append_event`, `advance_clock`, `append_committed_fact`, `upsert_relationship`) |
+| `src/backend/orchestration/app.ts`               | Wire lifecycle guard + extraction on `GENERATION_ENDED`                                                                                         |
+| `prompts/state-extractor/v1.md`                  | Versioned sidecar prompt for state extraction                                                                                                   |
+| `prompts/rebuild/v1.md`                          | Versioned sidecar prompt for cold-start rebuild                                                                                                 |
+| `tests/unit/extraction-schema.test.ts`           | Schema validation and conversion tests                                                                                                          |
+| `tests/unit/commit-guard.test.ts`                | Commit guard policy tests                                                                                                                       |
+| `tests/unit/state-extractor.test.ts`             | Extractor service unit tests with mock sidecar                                                                                                  |
+| `tests/unit/rebuild.test.ts`                     | Rebuild service unit tests                                                                                                                      |
+| `tests/integration/extraction-lifecycle.test.ts` | Integration test: interceptor → generation → extraction → commit flow                                                                           |
 
 ---
 
 ### Task 1: Add new PatchOperation types to shared schemas
 
 **Files:**
+
 - Modify: `src/shared/types/lwe.ts:143-158`
 - Modify: `src/shared/schema/patch.ts:1-28`
 
@@ -110,9 +111,14 @@ export function validatePatchOperations(
   for (const op of operations) {
     if (
       op.type === "upsert_entity" &&
-      !["player", "character_card_principal", "npc", "location", "faction", "object"].includes(
-        op.entity.kind,
-      )
+      ![
+        "player",
+        "character_card_principal",
+        "npc",
+        "location",
+        "faction",
+        "object",
+      ].includes(op.entity.kind)
     ) {
       errors.push(`upsert_entity: invalid kind "${op.entity.kind}"`);
     }
@@ -148,6 +154,7 @@ git commit -m "feat(phase2): add world-state mutation patch operation types"
 ### Task 2: Create Extraction Schema and Validation
 
 **Files:**
+
 - Create: `src/shared/schema/extraction.ts`
 - Test: `tests/unit/extraction-schema.test.ts`
 
@@ -162,9 +169,7 @@ import { validateExtractionResult } from "../../src/shared/schema/extraction.js"
 
 test("valid extraction result passes validation", () => {
   const result = {
-    entities: [
-      { id: "entity_1", kind: "npc", name: "Dena", source: "system" },
-    ],
+    entities: [{ id: "entity_1", kind: "npc", name: "Dena", source: "system" }],
     locations: [{ id: "loc_1", label: "Market Square" }],
     events: [
       {
@@ -197,7 +202,9 @@ test("extraction result rejects missing required fields", () => {
 
 test("extraction result rejects invalid entity kind", () => {
   const result = {
-    entities: [{ id: "e1", kind: "spaceship", name: "Nostromo", source: "system" }],
+    entities: [
+      { id: "e1", kind: "spaceship", name: "Nostromo", source: "system" },
+    ],
     locations: [],
     events: [],
     committedFacts: [],
@@ -246,7 +253,13 @@ In `src/shared/schema/extraction.ts`:
 ```typescript
 export type ExtractionEntity = {
   id: string;
-  kind: "player" | "character_card_principal" | "npc" | "location" | "faction" | "object";
+  kind:
+    | "player"
+    | "character_card_principal"
+    | "npc"
+    | "location"
+    | "faction"
+    | "object";
   name: string;
   source: "seed" | "user" | "system";
 };
@@ -294,9 +307,7 @@ const VALID_ENTITY_KINDS = new Set([
   "object",
 ]);
 
-export function validateExtractionResult(
-  value: unknown,
-): string[] {
+export function validateExtractionResult(value: unknown): string[] {
   const errors: string[] = [];
 
   if (typeof value !== "object" || value === null) {
@@ -310,9 +321,12 @@ export function validateExtractionResult(
   } else {
     for (let i = 0; i < raw.entities.length; i++) {
       const e = raw.entities[i] as Record<string, unknown>;
-      if (!e.id || typeof e.id !== "string") errors.push(`entities[${i}]: missing or invalid id`);
-      if (!VALID_ENTITY_KINDS.has(String(e.kind))) errors.push(`entities[${i}]: invalid kind "${String(e.kind)}"`);
-      if (!e.name || typeof e.name !== "string") errors.push(`entities[${i}]: missing or invalid name`);
+      if (!e.id || typeof e.id !== "string")
+        errors.push(`entities[${i}]: missing or invalid id`);
+      if (!VALID_ENTITY_KINDS.has(String(e.kind)))
+        errors.push(`entities[${i}]: invalid kind "${String(e.kind)}"`);
+      if (!e.name || typeof e.name !== "string")
+        errors.push(`entities[${i}]: missing or invalid name`);
     }
   }
 
@@ -321,8 +335,10 @@ export function validateExtractionResult(
   } else {
     for (let i = 0; i < raw.locations.length; i++) {
       const loc = raw.locations[i] as Record<string, unknown>;
-      if (!loc.id || typeof loc.id !== "string") errors.push(`locations[${i}]: missing id`);
-      if (!loc.label || typeof loc.label !== "string") errors.push(`locations[${i}]: missing label`);
+      if (!loc.id || typeof loc.id !== "string")
+        errors.push(`locations[${i}]: missing id`);
+      if (!loc.label || typeof loc.label !== "string")
+        errors.push(`locations[${i}]: missing label`);
     }
   }
 
@@ -331,9 +347,12 @@ export function validateExtractionResult(
   } else {
     for (let i = 0; i < raw.events.length; i++) {
       const evt = raw.events[i] as Record<string, unknown>;
-      if (!evt.id || typeof evt.id !== "string") errors.push(`events[${i}]: missing id`);
-      if (!evt.kind || typeof evt.kind !== "string") errors.push(`events[${i}]: missing kind`);
-      if (!evt.summary || typeof evt.summary !== "string") errors.push(`events[${i}]: missing summary`);
+      if (!evt.id || typeof evt.id !== "string")
+        errors.push(`events[${i}]: missing id`);
+      if (!evt.kind || typeof evt.kind !== "string")
+        errors.push(`events[${i}]: missing kind`);
+      if (!evt.summary || typeof evt.summary !== "string")
+        errors.push(`events[${i}]: missing summary`);
     }
   }
 
@@ -347,8 +366,10 @@ export function validateExtractionResult(
 
   if (raw.timeCue !== null && typeof raw.timeCue === "object") {
     const tc = raw.timeCue as Record<string, unknown>;
-    if (!tc.time || typeof tc.time !== "string") errors.push("timeCue: missing or invalid time");
-    if (!tc.source || typeof tc.source !== "string") errors.push("timeCue: missing or invalid source");
+    if (!tc.time || typeof tc.time !== "string")
+      errors.push("timeCue: missing or invalid time");
+    if (!tc.source || typeof tc.source !== "string")
+      errors.push("timeCue: missing or invalid source");
   } else if (raw.timeCue !== null) {
     errors.push("timeCue must be null or an object");
   }
@@ -432,6 +453,7 @@ git commit -m "feat(phase2): add extraction schema with validation and conversio
 ### Task 3: Implement new PatchOperation handlers in patch service
 
 **Files:**
+
 - Modify: `src/backend/patches/service.ts:93-113`
 
 - [ ] **Step 1: Write the failing patch-handler tests**
@@ -593,83 +615,85 @@ Expected: The new tests fail because the new operation types aren't handled in t
 In `src/backend/patches/service.ts`, edit the operations switch (around line 93-113). Replace the existing switch block:
 
 ```typescript
-    for (const operation of patch.operations) {
-      switch (operation.type) {
-        case "initialize_graph":
-          nextGraph.settingsSnapshot = operation.settings;
-          nextGraph.mode = operation.settings.operationMode;
-          break;
-        case "update_settings_snapshot":
-          nextGraph.settingsSnapshot = operation.settings;
-          nextGraph.mode = operation.settings.operationMode;
-          break;
-        case "persist_scene_impact":
-          nextGraph.sceneImpact = operation.sceneImpact;
-          break;
-        case "append_audit_record":
-          break;
-        case "record_migration_result":
-          break;
-        case "record_generation_correlation":
-          break;
-        case "upsert_entity":
-          nextGraph.world.entities[operation.entity.id] = {
-            id: operation.entity.id,
-            kind: operation.entity.kind,
-            name: operation.entity.name,
-            source: operation.entity.source,
-            createdAt: patch.createdAt,
-            updatedAt: patch.createdAt,
-          };
-          break;
-        case "upsert_location":
-          nextGraph.world.locations[operation.location.id] = {
-            id: operation.location.id,
-            label: operation.location.label,
-            updatedAt: patch.createdAt,
-          };
-          break;
-        case "append_event":
-          nextGraph.world.events = [
-            ...nextGraph.world.events,
-            {
-              id: operation.event.id,
-              kind: operation.event.kind,
-              summary: operation.event.summary,
-              participants: operation.event.participants,
-              locationId: operation.event.locationId,
-              createdAt: operation.event.createdAt,
-            },
-          ];
-          break;
-        case "advance_clock":
-          nextGraph.world.clock.currentTime = operation.currentTime;
-          nextGraph.world.clock.lastAdvanceSource = operation.source;
-          break;
-        case "append_committed_fact":
-          nextGraph.world.events = [
-            ...nextGraph.world.events,
-            {
-              id: `committed:${nextGraph.world.events.length + 1}`,
-              kind: "committed_fact",
-              summary: operation.fact,
-              participants: [],
-              locationId: null,
-              createdAt: patch.createdAt,
-            },
-          ];
-          break;
-        case "upsert_relationship":
-          nextGraph.world.relationships[`${operation.relationship.sourceId}->${operation.relationship.targetId}`] = {
-            sourceId: operation.relationship.sourceId,
-            targetId: operation.relationship.targetId,
-            stance: operation.relationship.stance,
-            evidence: operation.relationship.evidence,
-            updatedAt: operation.relationship.updatedAt,
-          };
-          break;
-      }
-    }
+for (const operation of patch.operations) {
+  switch (operation.type) {
+    case "initialize_graph":
+      nextGraph.settingsSnapshot = operation.settings;
+      nextGraph.mode = operation.settings.operationMode;
+      break;
+    case "update_settings_snapshot":
+      nextGraph.settingsSnapshot = operation.settings;
+      nextGraph.mode = operation.settings.operationMode;
+      break;
+    case "persist_scene_impact":
+      nextGraph.sceneImpact = operation.sceneImpact;
+      break;
+    case "append_audit_record":
+      break;
+    case "record_migration_result":
+      break;
+    case "record_generation_correlation":
+      break;
+    case "upsert_entity":
+      nextGraph.world.entities[operation.entity.id] = {
+        id: operation.entity.id,
+        kind: operation.entity.kind,
+        name: operation.entity.name,
+        source: operation.entity.source,
+        createdAt: patch.createdAt,
+        updatedAt: patch.createdAt,
+      };
+      break;
+    case "upsert_location":
+      nextGraph.world.locations[operation.location.id] = {
+        id: operation.location.id,
+        label: operation.location.label,
+        updatedAt: patch.createdAt,
+      };
+      break;
+    case "append_event":
+      nextGraph.world.events = [
+        ...nextGraph.world.events,
+        {
+          id: operation.event.id,
+          kind: operation.event.kind,
+          summary: operation.event.summary,
+          participants: operation.event.participants,
+          locationId: operation.event.locationId,
+          createdAt: operation.event.createdAt,
+        },
+      ];
+      break;
+    case "advance_clock":
+      nextGraph.world.clock.currentTime = operation.currentTime;
+      nextGraph.world.clock.lastAdvanceSource = operation.source;
+      break;
+    case "append_committed_fact":
+      nextGraph.world.events = [
+        ...nextGraph.world.events,
+        {
+          id: `committed:${nextGraph.world.events.length + 1}`,
+          kind: "committed_fact",
+          summary: operation.fact,
+          participants: [],
+          locationId: null,
+          createdAt: patch.createdAt,
+        },
+      ];
+      break;
+    case "upsert_relationship":
+      nextGraph.world.relationships[
+        `${operation.relationship.sourceId}->${operation.relationship.targetId}`
+      ] = {
+        sourceId: operation.relationship.sourceId,
+        targetId: operation.relationship.targetId,
+        stance: operation.relationship.stance,
+        evidence: operation.relationship.evidence,
+        updatedAt: operation.relationship.updatedAt,
+      };
+      break;
+  }
+}
 ```
 
 Now add `EventEntry` type to the WorldGraph schema. In `src/shared/types/lwe.ts`, find the `WorldGraph.world` type and update the `events` array items. The current type is `Array<{ id: string; kind: string; createdAt: string }>`. Change it to include the new fields.
@@ -677,38 +701,41 @@ Now add `EventEntry` type to the WorldGraph schema. In `src/shared/types/lwe.ts`
 Update the WorldGraph type by replacing the events sub-entry. In `lwe.ts` the world field currently is:
 
 ```typescript
-    events: Array<{ id: string; kind: string; createdAt: string }>;
+events: Array<{ id: string; kind: string; createdAt: string }>;
 ```
 
 Replace with:
 
 ```typescript
-    events: Array<{
-      id: string;
-      kind: string;
-      summary: string;
-      participants: string[];
-      locationId: string | null;
-      createdAt: string;
-    }>;
+events: Array<{
+  id: string;
+  kind: string;
+  summary: string;
+  participants: string[];
+  locationId: string | null;
+  createdAt: string;
+}>;
 ```
 
 Also update the relationships type. Currently:
 
 ```typescript
-    relationships: Record<string, never>;
+relationships: Record<string, never>;
 ```
 
 Replace with:
 
 ```typescript
-    relationships: Record<string, {
-      sourceId: string;
-      targetId: string;
-      stance: string;
-      evidence: string;
-      updatedAt: string;
-    }>;
+relationships: Record<
+  string,
+  {
+    sourceId: string;
+    targetId: string;
+    stance: string;
+    evidence: string;
+    updatedAt: string;
+  }
+>;
 ```
 
 - [ ] **Step 4: Run typecheck + tests**
@@ -731,6 +758,7 @@ git commit -m "feat(phase2): implement new patch operation handlers for world-st
 ### Task 4: Create the commit guard
 
 **Files:**
+
 - Create: `src/backend/lifecycle/commit-guard.ts`
 - Test: `tests/unit/commit-guard.test.ts`
 
@@ -924,7 +952,9 @@ export function createCommitGuard(input: {
 Now update the correlation service to export its type. In `src/backend/lifecycle/correlation.ts`, add at the bottom:
 
 ```typescript
-export type GenerationCorrelationService = ReturnType<typeof createGenerationCorrelationService>;
+export type GenerationCorrelationService = ReturnType<
+  typeof createGenerationCorrelationService
+>;
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
@@ -949,6 +979,7 @@ git commit -m "feat(phase2): add commit guard for generation lifecycle eligibili
 ### Task 5: Create the State Extractor prompt and prompt builder
 
 **Files:**
+
 - Create: `prompts/state-extractor/v1.md`
 - Create: `src/backend/extraction/prompt.ts`
 
@@ -956,7 +987,7 @@ git commit -m "feat(phase2): add commit guard for generation lifecycle eligibili
 
 In `prompts/state-extractor/v1.md`:
 
-```markdown
+````markdown
 # State Extractor v1
 
 You are extracting grounded world-state changes from a single turn of a roleplay conversation.
@@ -966,6 +997,7 @@ You are extracting grounded world-state changes from a single turn of a roleplay
 Read the user message and assistant response below. Extract only changes that are **explicitly stated or directly implied** by the text.
 
 Rules:
+
 - Do not invent hidden motives, elapsed time, relationships, or events not grounded in the text.
 - Separate attempts from completed outcomes. If a punch was thrown but blocked, record the attempt, not an injury.
 - Dialogue claims are NOT objective truth. If an NPC lies, record only that the claim was made.
@@ -1021,8 +1053,10 @@ Return ONLY a valid JSON object with these fields:
   ]
 }
 ```
+````
 
 If no entities, locations, events, facts, or relationships were introduced, return empty arrays and null timeCue:
+
 ```json
 {
   "entities": [],
@@ -1033,7 +1067,8 @@ If no entities, locations, events, facts, or relationships were introduced, retu
   "relationships": []
 }
 ```
-```
+
+````
 
 - [ ] **Step 2: Write the prompt builder module**
 
@@ -1099,7 +1134,7 @@ ${input.assistantMessage}
 
 Return JSON with: entities[], locations[], events[], timeCue (null or object with time+source), committedFacts[], relationships[].`;
 }
-```
+````
 
 - [ ] **Step 3: Run typecheck**
 
@@ -1118,6 +1153,7 @@ git commit -m "feat(phase2): add state extractor prompt v1 and prompt builder"
 ### Task 6: Create the State Extractor service
 
 **Files:**
+
 - Create: `src/backend/extraction/service.ts`
 - Modify: `src/shared/types/lwe.ts` — add `ExtractionOptions` type if needed
 - Test: `tests/unit/state-extractor.test.ts`
@@ -1204,7 +1240,12 @@ test("state extractor applies entity extraction via sidecar", async () => {
       JSON.stringify({
         entities: [
           { id: "dena", kind: "npc", name: "Dena", source: "system" },
-          { id: "market_square", kind: "location", name: "Market Square", source: "system" },
+          {
+            id: "market_square",
+            kind: "location",
+            name: "Market Square",
+            source: "system",
+          },
         ],
         locations: [{ id: "market_square", label: "Market Square" }],
         events: [
@@ -1293,7 +1334,9 @@ test("state extractor rejects extraction with validation errors", async () => {
     patchService,
     sidecarCaller: async () =>
       JSON.stringify({
-        entities: [{ id: "bad", kind: "invalid_kind", name: "Bad", source: "system" }],
+        entities: [
+          { id: "bad", kind: "invalid_kind", name: "Bad", source: "system" },
+        ],
         locations: [],
         events: [],
         timeCue: null,
@@ -1387,7 +1430,10 @@ export function createStateExtractor(input: {
       }
 
       const extraction = parsed as ExtractionResult;
-      const operations = convertExtractionToPatches(extraction, extractionInput.chatId);
+      const operations = convertExtractionToPatches(
+        extraction,
+        extractionInput.chatId,
+      );
 
       if (operations.length === 0) {
         return { applied: true, eventsCount: 0 };
@@ -1447,7 +1493,11 @@ import { createPatchEnvelope } from "../../shared/schema/patch.js";
 import type { ExtractionResult } from "../../shared/schema/extraction.js";
 import type { PatchEnvelope } from "../../shared/types/lwe.js";
 
-type PatchApplyFn = (patch: PatchEnvelope) => Promise<{ accepted: boolean; reason: string; nextRevision: number | null }>;
+type PatchApplyFn = (patch: PatchEnvelope) => Promise<{
+  accepted: boolean;
+  reason: string;
+  nextRevision: number | null;
+}>;
 
 export type SidecarCaller = (prompt: string) => Promise<string>;
 
@@ -1501,7 +1551,10 @@ export function createStateExtractor(input: {
       }
 
       const extraction = parsed as ExtractionResult;
-      const operations = convertExtractionToPatches(extraction, extractionInput.chatId);
+      const operations = convertExtractionToPatches(
+        extraction,
+        extractionInput.chatId,
+      );
 
       if (operations.length === 0) {
         return { applied: true, eventsCount: 0 };
@@ -1546,12 +1599,15 @@ export function createStateExtractor(input: {
 Now also update the test to match — change `patchService` to `applyPatch`:
 
 In the test, change:
+
 ```typescript
   const extractor = createStateExtractor({
     patchService,
     ...
 ```
+
 to:
+
 ```typescript
   const extractor = createStateExtractor({
     applyPatch: patchService.applyPatch,
@@ -1571,7 +1627,11 @@ Wait, I should also check that the `applyPatch` return type from the patch servi
 ```typescript
 export type PatchApplyResult = {
   accepted: boolean;
-  reason: "accepted" | "duplicate_patch_id" | "revision_mismatch" | "validation_failed";
+  reason:
+    | "accepted"
+    | "duplicate_patch_id"
+    | "revision_mismatch"
+    | "validation_failed";
   nextRevision: number | null;
 };
 ```
@@ -1602,6 +1662,7 @@ git commit -m "feat(phase2): add state extractor service with sidecar integratio
 ### Task 7: Create the rebuild service and prompt
 
 **Files:**
+
 - Create: `prompts/rebuild/v1.md`
 - Create: `src/backend/rebuild/prompt.ts`
 - Create: `src/backend/rebuild/service.ts`
@@ -1611,7 +1672,7 @@ git commit -m "feat(phase2): add state extractor service with sidecar integratio
 
 In `prompts/rebuild/v1.md`:
 
-```markdown
+````markdown
 # Rebuild v1
 
 You are building the initial world state for a roleplay chat by reading conversation history.
@@ -1621,6 +1682,7 @@ You are building the initial world state for a roleplay chat by reading conversa
 Read the following conversation messages and extract all named entities, locations, events, relationships, and time information. Process them in strict chronological order (oldest first).
 
 Rules:
+
 - Extract every unique entity mentioned (NPCs, player, locations, objects).
 - Extract every location named or clearly implied.
 - Extract every distinct event that clearly occurred.
@@ -1632,6 +1694,7 @@ Rules:
 ## Output Format
 
 Return a JSON object:
+
 ```json
 {
   "entities": [...],
@@ -1641,9 +1704,12 @@ Return a JSON object:
   "approximateTimeCue": "late afternoon" | null
 }
 ```
+````
 
 Entity IDs use snake_case from the entity name. Events get sequential IDs (evt_001, evt_002...).
+
 ```
+
 ```
 
 - [ ] **Step 2: Write the rebuild prompt builder**
@@ -1717,7 +1783,12 @@ test("rebuild service extracts entities from history batch", async () => {
         entities: [
           { id: "ken", kind: "npc", name: "Ken", source: "system" },
           { id: "arlo", kind: "npc", name: "Arlo", source: "system" },
-          { id: "shop", kind: "location", name: "Arlo's Shop", source: "system" },
+          {
+            id: "shop",
+            kind: "location",
+            name: "Arlo's Shop",
+            source: "system",
+          },
         ],
         locations: [{ id: "shop", label: "Arlo's Shop" }],
         events: [
@@ -1730,7 +1801,12 @@ test("rebuild service extracts entities from history batch", async () => {
           },
         ],
         relationships: [
-          { sourceId: "ken", targetId: "arlo", stance: "unknown", evidence: "first meeting" },
+          {
+            sourceId: "ken",
+            targetId: "arlo",
+            stance: "unknown",
+            evidence: "first meeting",
+          },
         ],
         approximateTimeCue: "morning",
       });
@@ -1742,7 +1818,10 @@ test("rebuild service extracts entities from history batch", async () => {
     revision: 1,
     messages: [
       { role: "user", content: "I walk into the shop." },
-      { role: "assistant", content: "Ken enters Arlo's shop. The merchant looks up." },
+      {
+        role: "assistant",
+        content: "Ken enters Arlo's shop. The merchant looks up.",
+      },
     ],
   });
 
@@ -1846,7 +1925,11 @@ import { buildRebuildUserPrompt } from "./prompt.js";
 import { createPatchEnvelope } from "../../shared/schema/patch.js";
 import type { PatchEnvelope } from "../../shared/types/lwe.js";
 
-type PatchApplyFn = (patch: PatchEnvelope) => Promise<{ accepted: boolean; reason: string; nextRevision: number | null }>;
+type PatchApplyFn = (patch: PatchEnvelope) => Promise<{
+  accepted: boolean;
+  reason: string;
+  nextRevision: number | null;
+}>;
 type SidecarCaller = (prompt: string) => Promise<string>;
 
 export type RebuildInput = {
@@ -1901,9 +1984,16 @@ export function createRebuildService(input: {
               type: "upsert_entity",
               entity: {
                 id: String(entity.id),
-                kind: entity.kind as PatchOperation & { type: "upsert_entity" } extends never ? never : any,
+                kind: entity.kind as PatchOperation & {
+                  type: "upsert_entity";
+                } extends never
+                  ? never
+                  : any,
                 name: String(entity.name),
-                source: String(entity.source ?? "system") as "seed" | "user" | "system",
+                source: String(entity.source ?? "system") as
+                  | "seed"
+                  | "user"
+                  | "system",
               },
             });
           }
@@ -1972,7 +2062,9 @@ export function createRebuildService(input: {
       }
 
       // Count entity operations
-      const entityCount = operations.filter((op) => op.type === "upsert_entity").length;
+      const entityCount = operations.filter(
+        (op) => op.type === "upsert_entity",
+      ).length;
       return { applied: true, entitiesCount: entityCount };
     } catch (error) {
       return {
@@ -1990,17 +2082,25 @@ export function createRebuildService(input: {
 Wait, there's a problem with the `kind` typing. Let me use `as any` to avoid complex type gymnastics since the validation accepts it.
 
 Let me simplify the entity parsing:
+
 ```typescript
 if (Array.isArray(entities)) {
   for (const entity of entities) {
-    if (entity && typeof entity.id === "string" && typeof entity.kind === "string" && typeof entity.name === "string") {
+    if (
+      entity &&
+      typeof entity.id === "string" &&
+      typeof entity.kind === "string" &&
+      typeof entity.name === "string"
+    ) {
       operations.push({
         type: "upsert_entity" as const,
         entity: {
           id: entity.id,
           kind: entity.kind as any,
           name: entity.name,
-          source: (typeof entity.source === "string" ? entity.source : "system") as any,
+          source: (typeof entity.source === "string"
+            ? entity.source
+            : "system") as any,
         },
       });
     }
@@ -2011,6 +2111,7 @@ if (Array.isArray(entities)) {
 - [ ] **Step 6: Add the PatchOperation import**
 
 Add at the top of `rebuild/service.ts`:
+
 ```typescript
 import type { PatchOperation } from "../../shared/types/lwe.js";
 ```
@@ -2037,6 +2138,7 @@ git commit -m "feat(phase2): add rebuild service for cold-start world state from
 ### Task 8: Wire everything into the orchestration app
 
 **Files:**
+
 - Modify: `src/backend/orchestration/app.ts`
 
 - [ ] **Step 1: Write the integration test**
@@ -2066,7 +2168,9 @@ test("full lifecycle: interceptor -> guard allows extraction -> patch applied", 
       chatId: "chat-life-1",
       baseRevision: 0,
       sourceTask: "test",
-      operations: [{ type: "initialize_graph", settings: createDefaultSettings() }],
+      operations: [
+        { type: "initialize_graph", settings: createDefaultSettings() },
+      ],
       provenance: { source: "test", detail: "init" },
     }),
   );
@@ -2080,7 +2184,10 @@ test("full lifecycle: interceptor -> guard allows extraction -> patch applied", 
   });
 
   // Simulate generation start
-  correlation.onGenerationStarted({ generationId: "gen-life-1", chatId: "chat-life-1" });
+  correlation.onGenerationStarted({
+    generationId: "gen-life-1",
+    chatId: "chat-life-1",
+  });
 
   // Guard says "in progress"
   const duringGeneration = guard.shouldCommit("gen-life-1");
@@ -2103,7 +2210,12 @@ test("full lifecycle: interceptor -> guard allows extraction -> patch applied", 
     operations: [
       {
         type: "upsert_entity",
-        entity: { id: "test_char", kind: "npc", name: "Test", source: "system" },
+        entity: {
+          id: "test_char",
+          kind: "npc",
+          name: "Test",
+          source: "system",
+        },
       },
     ],
     provenance: { source: "test", detail: "extraction simulation" },
@@ -2130,7 +2242,9 @@ test("full lifecycle: non-eligible generation never triggers extraction", async 
       chatId: "chat-life-swipe",
       baseRevision: 0,
       sourceTask: "test",
-      operations: [{ type: "initialize_graph", settings: createDefaultSettings() }],
+      operations: [
+        { type: "initialize_graph", settings: createDefaultSettings() },
+      ],
       provenance: { source: "test", detail: "init" },
     }),
   );
@@ -2141,7 +2255,10 @@ test("full lifecycle: non-eligible generation never triggers extraction", async 
     provisionalRevision: 1,
     timestamp: "2026-06-22T00:00:00.000Z",
   });
-  correlation.onGenerationStarted({ generationId: "gen-swipe", chatId: "chat-life-swipe" });
+  correlation.onGenerationStarted({
+    generationId: "gen-swipe",
+    chatId: "chat-life-swipe",
+  });
   correlation.onGenerationEnded({ generationId: "gen-swipe" });
 
   const decision = guard.shouldCommit("gen-swipe");
@@ -2173,68 +2290,86 @@ import { createStateExtractor } from "../extraction/service.js";
 Inside `createBackendApp`, after `generationCorrelation`:
 
 ```typescript
-  const commitGuard = createCommitGuard({ correlationService: generationCorrelation });
+const commitGuard = createCommitGuard({
+  correlationService: generationCorrelation,
+});
 
-  // Simple sidecar caller — wraps spindle.generate for extraction
-  const extractorSidecarCaller = async (prompt: string): Promise<string> => {
-    // In Phase 2, use a basic generate call.
-    // The sidecar connection is configured in settings.
-    // For now, return empty extraction to not break non-extraction scenarios.
-    return JSON.stringify({
-      entities: [],
-      locations: [],
-      events: [],
-      timeCue: null,
-      committedFacts: [],
-      relationships: [],
-    });
-  };
-
-  const stateExtractor = createStateExtractor({
-    applyPatch: patchService.applyPatch.bind(patchService),
-    sidecarCaller: extractorSidecarCaller,
+// Simple sidecar caller — wraps spindle.generate for extraction
+const extractorSidecarCaller = async (prompt: string): Promise<string> => {
+  // In Phase 2, use a basic generate call.
+  // The sidecar connection is configured in settings.
+  // For now, return empty extraction to not break non-extraction scenarios.
+  return JSON.stringify({
+    entities: [],
+    locations: [],
+    events: [],
+    timeCue: null,
+    committedFacts: [],
+    relationships: [],
   });
+};
+
+const stateExtractor = createStateExtractor({
+  applyPatch: patchService.applyPatch.bind(patchService),
+  sidecarCaller: extractorSidecarCaller,
+});
 ```
 
 Then update the `GENERATION_ENDED` handler to trigger extraction:
 
 ```typescript
-  spindle.on("GENERATION_ENDED", (payload) => {
-    const detail = payload as unknown as Record<string, unknown>;
-    const generationId = readStringField(detail, "generationId", "generation_id");
-    const chatId = readStringField(detail, "chatId", "chat_id");
-    if (generationId) {
-      generationCorrelation.onGenerationEnded({ generationId });
-    }
+spindle.on("GENERATION_ENDED", (payload) => {
+  const detail = payload as unknown as Record<string, unknown>;
+  const generationId = readStringField(detail, "generationId", "generation_id");
+  const chatId = readStringField(detail, "chatId", "chat_id");
+  if (generationId) {
+    generationCorrelation.onGenerationEnded({ generationId });
+  }
 
-    // Trigger extraction only for commit-eligible generations
-    if (generationId) {
-      const decision = commitGuard.shouldCommit(generationId);
-      if (decision.eligible) {
-        // Extract committed user message and assistant response from payload
-        const userMessage = readStringField(detail, "userMessage", "user_message", "userText", "user_text");
-        const assistantMessage = readStringField(detail, "assistantMessage", "assistant_message", "responseText", "response_text");
+  // Trigger extraction only for commit-eligible generations
+  if (generationId) {
+    const decision = commitGuard.shouldCommit(generationId);
+    if (decision.eligible) {
+      // Extract committed user message and assistant response from payload
+      const userMessage = readStringField(
+        detail,
+        "userMessage",
+        "user_message",
+        "userText",
+        "user_text",
+      );
+      const assistantMessage = readStringField(
+        detail,
+        "assistantMessage",
+        "assistant_message",
+        "responseText",
+        "response_text",
+      );
 
-        if (chatId && userMessage && assistantMessage) {
-          const record = generationCorrelation.getRecord(generationId);
-          const revision = record?.provisionalRevision ?? 1;
+      if (chatId && userMessage && assistantMessage) {
+        const record = generationCorrelation.getRecord(generationId);
+        const revision = record?.provisionalRevision ?? 1;
 
-          // Fire-and-forget: do not block generation completion
-          stateExtractor.extractAndApply({
+        // Fire-and-forget: do not block generation completion
+        stateExtractor
+          .extractAndApply({
             chatId,
             generationId,
             revision,
             userMessage,
             assistantMessage,
-          }).then((result) => {
+          })
+          .then((result) => {
             if (!result.applied) {
-              spindle.log.warn(`LWE State Extraction failed: ${result.error ?? "unknown"}`);
+              spindle.log.warn(
+                `LWE State Extraction failed: ${result.error ?? "unknown"}`,
+              );
             }
           });
-        }
       }
     }
-  });
+  }
+});
 ```
 
 Also update `readStringField` to accept multiple fallback keys (already does), but add `userMessage` and `assistantMessage` to the keys in the call above.
@@ -2312,22 +2447,22 @@ git commit -m "chore(phase2): fix lint, format, and build after canon extraction
 
 ## Acceptance Criteria (Phase 2 Definition of Done)
 
-| Criterion | Covered By |
-|---|---|
-| Generation lifecycle guard prevents extraction on non-normal generations | Task 4 (commit-guard tests) |
-| Swipe/regenerate outputs create no canonical graph revision | Task 4 commit-guard + Task 8 integration test |
-| State Extractor reads user + assistant messages and calls sidecar | Task 6 (state-extractor service) |
-| State Extractor validates sidecar JSON output | Task 2 (extraction-schema validation) + Task 6 test |
-| Malformed JSON is rejected without partial mutation | Task 6 test (malformed JSON) |
-| Extraction creates entities, locations, events in WorldGraph via patches | Task 3 (patch handlers) + Task 6 test |
-| Extraction advances clock when time cue present | Task 3 (advance_clock handler) |
-| Ambiguous dialogue does not advance time | Extraction prompt v1: returns null timeCue when no cue present |
-| State Extractor preserves committed facts as events | Task 3 (append_committed_fact handler) |
-| Rebuild service creates initial world state from chat history | Task 7 (rebuild service) |
-| Rebuild handles empty history gracefully | Task 7 test (empty history) |
-| Sidecar failure does not block main generation | Task 8 (fire-and-forget with log warning) |
-| Duplicate processing is idempotent | Existing patch service idempotency + Task 1 operation types |
-| Same-chat serialization is preserved | Existing patch service revision checking |
+| Criterion                                                                | Covered By                                                     |
+| ------------------------------------------------------------------------ | -------------------------------------------------------------- |
+| Generation lifecycle guard prevents extraction on non-normal generations | Task 4 (commit-guard tests)                                    |
+| Swipe/regenerate outputs create no canonical graph revision              | Task 4 commit-guard + Task 8 integration test                  |
+| State Extractor reads user + assistant messages and calls sidecar        | Task 6 (state-extractor service)                               |
+| State Extractor validates sidecar JSON output                            | Task 2 (extraction-schema validation) + Task 6 test            |
+| Malformed JSON is rejected without partial mutation                      | Task 6 test (malformed JSON)                                   |
+| Extraction creates entities, locations, events in WorldGraph via patches | Task 3 (patch handlers) + Task 6 test                          |
+| Extraction advances clock when time cue present                          | Task 3 (advance_clock handler)                                 |
+| Ambiguous dialogue does not advance time                                 | Extraction prompt v1: returns null timeCue when no cue present |
+| State Extractor preserves committed facts as events                      | Task 3 (append_committed_fact handler)                         |
+| Rebuild service creates initial world state from chat history            | Task 7 (rebuild service)                                       |
+| Rebuild handles empty history gracefully                                 | Task 7 test (empty history)                                    |
+| Sidecar failure does not block main generation                           | Task 8 (fire-and-forget with log warning)                      |
+| Duplicate processing is idempotent                                       | Existing patch service idempotency + Task 1 operation types    |
+| Same-chat serialization is preserved                                     | Existing patch service revision checking                       |
 
 ## Self-Review Checklist
 

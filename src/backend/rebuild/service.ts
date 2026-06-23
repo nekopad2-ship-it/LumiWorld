@@ -5,7 +5,10 @@ import {
 } from "../../shared/schema/extraction.js";
 import { createPatchEnvelope } from "../../shared/schema/patch.js";
 import type { ExtractionResult } from "../../shared/schema/extraction.js";
-import type { PatchEnvelope, PatchApplyResult } from "../../shared/types/lwe.js";
+import type {
+  PatchEnvelope,
+  PatchApplyResult,
+} from "../../shared/types/lwe.js";
 
 export type RebuildInput = {
   chatId: string;
@@ -86,7 +89,9 @@ export function createRebuildService(input: {
         };
       }
 
-      const entityCount = operations.filter((op) => op.type === "upsert_entity").length;
+      const entityCount = operations.filter(
+        (op) => op.type === "upsert_entity",
+      ).length;
       return { applied: true, entitiesCount: entityCount };
     } catch (error) {
       return {

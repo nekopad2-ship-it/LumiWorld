@@ -116,7 +116,9 @@ export function createPatchService(input: { storage: JsonStorage }) {
             kind: operation.entity.kind,
             name: operation.entity.name,
             source: operation.entity.source,
-            createdAt: nextGraph.world.entities[operation.entity.id]?.createdAt ?? patch.createdAt,
+            createdAt:
+              nextGraph.world.entities[operation.entity.id]?.createdAt ??
+              patch.createdAt,
             updatedAt: patch.createdAt,
           };
           break;
@@ -168,10 +170,9 @@ export function createPatchService(input: { storage: JsonStorage }) {
             updatedAt: operation.relationship.updatedAt,
           };
           break;
-        default: {
-          const _exhaustive: never = operation;
+        default:
+          operation satisfies never;
           break;
-        }
       }
     }
 

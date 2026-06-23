@@ -54,7 +54,7 @@ enabled = true   # language server tools; servers launch lazily when used
 # Rules are "Tool" or "Tool(specifier)"; e.g. Bash(go test:*), Edit(src/**).
 mode  = "ask"
 # deny = ["Bash(rm -rf*)", "Bash(git push*)"]   # hard-blocked in every mode
-allow = ["Edit", "task", "review"]
+allow = ["Edit", "task", "review", "Bash(cd C:\\Users\\junbr\\Documents\\Projects\\Lumiverse Extensions\\WLE && git status)", "Bash(cd C:\\Users\\junbr\\Documents\\Projects\\Lumiverse Extensions\\WLE && git log --oneline -10)", "Bash(cd \"C:\\Users\\junbr\\Documents\\Projects\\Lumiverse Extensions\\WLE\" && git status)", "Bash(cd \"C:\\Users\\junbr\\Documents\\Projects\\Lumiverse Extensions\\WLE\" && git diff --stat)", "Bash(cd \"C:\\Users\\junbr\\Documents\\Projects\\Lumiverse Extensions\\WLE\" && git log --oneline -20)", "Bash(cd \"C:\\Users\\junbr\\Documents\\Projects\\Lumiverse Extensions\\WLE\" && git add -A && git commit -m \"fix(phase2): lint, format, and review fixes across all Phase 2 modules\")"]
 # ask = ["Edit(src/**)"]   # force a prompt even if otherwise allowed
 
 [sandbox]

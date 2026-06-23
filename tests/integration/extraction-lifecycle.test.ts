@@ -19,7 +19,9 @@ test("full lifecycle: interceptor -> guard allows extraction -> patch applied", 
       chatId: "chat-life-1",
       baseRevision: 0,
       sourceTask: "test",
-      operations: [{ type: "initialize_graph", settings: createDefaultSettings() }],
+      operations: [
+        { type: "initialize_graph", settings: createDefaultSettings() },
+      ],
       provenance: { source: "test", detail: "init" },
     }),
   );
@@ -33,7 +35,10 @@ test("full lifecycle: interceptor -> guard allows extraction -> patch applied", 
   });
 
   // Simulate generation start
-  correlation.onGenerationStarted({ generationId: "gen-life-1", chatId: "chat-life-1" });
+  correlation.onGenerationStarted({
+    generationId: "gen-life-1",
+    chatId: "chat-life-1",
+  });
 
   // Guard says "in progress"
   const duringGeneration = guard.shouldCommit("gen-life-1");
@@ -56,7 +61,12 @@ test("full lifecycle: interceptor -> guard allows extraction -> patch applied", 
     operations: [
       {
         type: "upsert_entity",
-        entity: { id: "test_char", kind: "npc", name: "Test", source: "system" },
+        entity: {
+          id: "test_char",
+          kind: "npc",
+          name: "Test",
+          source: "system",
+        },
       },
     ],
     provenance: { source: "test", detail: "extraction simulation" },
@@ -83,7 +93,9 @@ test("full lifecycle: non-eligible generation never triggers extraction", async 
       chatId: "chat-life-swipe",
       baseRevision: 0,
       sourceTask: "test",
-      operations: [{ type: "initialize_graph", settings: createDefaultSettings() }],
+      operations: [
+        { type: "initialize_graph", settings: createDefaultSettings() },
+      ],
       provenance: { source: "test", detail: "init" },
     }),
   );
@@ -94,7 +106,10 @@ test("full lifecycle: non-eligible generation never triggers extraction", async 
     provisionalRevision: 1,
     timestamp: "2026-06-22T00:00:00.000Z",
   });
-  correlation.onGenerationStarted({ generationId: "gen-swipe", chatId: "chat-life-swipe" });
+  correlation.onGenerationStarted({
+    generationId: "gen-swipe",
+    chatId: "chat-life-swipe",
+  });
   correlation.onGenerationEnded({ generationId: "gen-swipe" });
 
   const decision = guard.shouldCommit("gen-swipe");
